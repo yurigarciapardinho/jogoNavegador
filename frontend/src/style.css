@@ -1,0 +1,7 @@
+/* No TailwindCSS v4, a diretiva @import substitui as três diretivas @tailwind do v3. */
+@import "tailwindcss";
+
+/* Estilos base da aplicação */
+body {
+  @apply bg-stone-900 text-stone-200 font-serif;
+}

@@ -1,0 +1,38 @@
+{
+  "name": "tw2-clone-frontend",
+  "version": "1.0.0",
+  "description": "Interface do jogador para o jogo de navegador estilo TW2",
+  "private": true,
+  "author": "Yuri Garcia Pardinho <@yurigarciapardinho>",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "react",
+    "vite",
+    "typescript",
+    "tw2-clone",
+    "game-frontend"
+  ],
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173",
+    "test": "echo \"Testes automatizados em breve\" && exit 0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.18.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}

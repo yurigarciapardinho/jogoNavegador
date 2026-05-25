@@ -1,0 +1,25 @@
+/* Animações otimizadas usando apenas transform e opacity */
+
+@keyframes surgirSuave {
+  0% { 
+    transform: translateY(10px); 
+    opacity: 0; 
+  }
+  100% { 
+    transform: translateY(0); 
+    opacity: 1; 
+  }
+}
+
+.animarSurgimento {
+  animation: surgirSuave var(--velocidadeTransicao) ease-out forwards;
+}
+
+@keyframes desvanecer {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animarDesvanecer {
+  animation: desvanecer var(--velocidadeTransicao) ease-out forwards;
+}

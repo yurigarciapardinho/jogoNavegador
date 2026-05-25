@@ -1,0 +1,170 @@
+/* --- Estrutura Principal --- */
+.aplicativoRaiz {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cabecalhoJogo {
+  background-color: var(--corPainel);
+  padding: var(--espacamentoMedio);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: var(--camadaCabecalho);
+}
+
+.cabecalhoJogo_areaLogo {
+  display: flex;
+  align-items: center;
+  gap: var(--espacamentoMedio);
+}
+
+.cabecalhoJogo_logo {
+  font-weight: bold;
+  font-size: 1.25rem;
+  color: var(--corPrimariaHover);
+}
+
+.cabecalhoJogo_nomeJogador {
+  color: var(--corTextoSecundario);
+  font-size: 0.875rem;
+}
+
+.navegacaoPrincipal {
+  display: flex;
+  gap: var(--espacamentoPequeno);
+  align-items: center;
+}
+
+.conteudoPrincipal {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Telas Específicas --- */
+
+/* Tela de Login */
+.telaLogin {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--espacamentoMedio);
+}
+
+.telaLogin_caixa {
+  background-color: var(--corPainel);
+  padding: var(--espacamentoGrande);
+  border-radius: var(--bordaArredondada);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid var(--corBorda);
+}
+
+.telaLogin_titulo {
+  font-size: 1.875rem;
+  font-weight: bold;
+  text-align: center;
+  color: var(--corPrimariaHover);
+  margin-bottom: var(--espacamentoGrande);
+}
+
+.telaLogin_formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacamentoMedio);
+}
+
+.telaLogin_rodape {
+  margin-top: var(--espacamentoGrande);
+  text-align: center;
+}
+
+/* Tela do Mapa */
+.telaMapa {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--corFundoEscuro);
+}
+
+.telaMapa_containerPixi {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.telaMapa_dicaFlutuante {
+  position: absolute;
+  top: var(--espacamentoMedio);
+  left: var(--espacamentoMedio);
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: var(--espacamentoPequeno);
+  border-radius: var(--bordaArredondada);
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+/* Modal do Mapa */
+.modalFundo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--camadaModal);
+}
+
+.modalConteudo {
+  background-color: var(--corPainel);
+  border: 1px solid var(--corBorda);
+  border-radius: var(--bordaArredondada);
+  padding: var(--espacamentoGrande);
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modalCabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--espacamentoMedio);
+}
+
+.modalTitulo {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: var(--corPrimariaHover);
+}
+
+/* Telas Auxiliares (Aldeia/Relatórios) */
+.telaGeral {
+  flex: 1;
+  padding: var(--espacamentoGrande);
+}
+
+.telaGeral_titulo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: var(--espacamentoMedio);
+}
+
+.telaGeral_texto {
+  color: var(--corTextoSecundario);
+}

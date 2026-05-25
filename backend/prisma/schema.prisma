@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // No Prisma 7+, a URL de conexão é configurada exclusivamente em prisma.config.ts.
+  // Operações que exigem conexão direta (seed, migrate) usam DIRECT_URL
+  // para contornar limitações do PgBouncer.
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  passwordHash String    @default("")
+
+  villages     Village[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Village {
+  id          String   @id @default(uuid())
+  name        String
+  x           Int
+  y           Int
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  resources   VillageResource?
+  buildings   VillageBuilding?
+  units       VillageUnit?
+
+  buildQueues BuildingQueue[]
+  unitQueues  UnitQueue[]
+
+  // Inovação TW3: Controle de quantas vezes apanhou para evoluir automaticamente
+  attacksReceived Int      @default(0)
+
+  // Movimentos em que a aldeia é origem ou destino
+  movementsOrigin Movement[] @relation("MovementOrigin")
+  movementsTarget Movement[] @relation("MovementTarget")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([x, y])
+}
+
+model VillageResource {
+  id             String   @id @default(uuid())
+  villageId      String   @unique
+  village        Village  @relation(fields: [villageId], references: [id])
+
+  wood           Float    @default(500)
+  clay           Float    @default(500)
+  iron           Float    @default(500)
+
+  lastUpdate     DateTime @default(now())
+}
+
+model VillageBuilding {
+  id             String   @id @default(uuid())
+  villageId      String   @unique
+  village        Village  @relation(fields: [villageId], references: [id])
+
+  headquarters   Int      @default(1)
+  timberCamp     Int      @default(0)
+  clayPit        Int      @default(0)
+  ironMine       Int      @default(0)
+  farm           Int      @default(1)
+  warehouse      Int      @default(1)
+  barracks       Int      @default(0)
+  wall           Int      @default(0)
+}
+
+model VillageUnit {
+  id             String   @id @default(uuid())
+  villageId      String   @unique
+  village        Village  @relation(fields: [villageId], references: [id])
+
+  spear          Int      @default(0)
+  sword          Int      @default(0)
+  axe            Int      @default(0)
+}
+
+model BuildingQueue {
+  id             String   @id @default(uuid())
+  villageId      String
+  village        Village  @relation(fields: [villageId], references: [id])
+
+  buildingType   String
+  targetLevel    Int
+
+  startTime      DateTime @default(now())
+  endTime        DateTime
+
+  completed      Boolean  @default(false)
+}
+
+model UnitQueue {
+  id             String   @id @default(uuid())
+  villageId      String
+  village        Village  @relation(fields: [villageId], references: [id])
+
+  unitType       String
+  amount         Int
+
+  startTime      DateTime @default(now())
+  endTime        DateTime
+
+  completed      Boolean  @default(false)
+}
+
+model Movement {
+  id             String   @id @default(uuid())
+  type           String   // "ATTACK", "SUPPORT", "RETURN"
+  
+  originId       String
+  origin         Village  @relation("MovementOrigin", fields: [originId], references: [id])
+  
+  targetId       String
+  target         Village  @relation("MovementTarget", fields: [targetId], references: [id])
+
+  // Tropas enviadas
+  spear          Int      @default(0)
+  sword          Int      @default(0)
+  axe            Int      @default(0)
+
+  startTime      DateTime @default(now())
+  arrivalTime    DateTime
+
+  completed      Boolean  @default(false)
+}
+
+model CombatReport {
+  id           String   @id @default(uuid())
+  attackerId   String
+  defenderId   String?
+  originName   String
+  targetName   String
+  
+  result       String   // "ATTACKER_WON" | "DEFENDER_WON"
+  
+  // Tropas enviadas (Atacante)
+  atkSpear     Int      @default(0)
+  atkSword     Int      @default(0)
+  atkAxe       Int      @default(0)
+  
+  // Perdas (Atacante)
+  atkLostSpear Int      @default(0)
+  atkLostSword Int      @default(0)
+  atkLostAxe   Int      @default(0)
+  
+  // Tropas existentes (Defensor) (Usaremos -1 para ocultar como "???")
+  defSpear     Int      @default(0)
+  defSword     Int      @default(0)
+  defAxe       Int      @default(0)
+  
+  // Perdas (Defensor)
+  defLostSpear Int      @default(0)
+  defLostSword Int      @default(0)
+  defLostAxe   Int      @default(0)
+
+  // Saque
+  lootedWood   Int      @default(0)
+  lootedClay   Int      @default(0)
+  lootedIron   Int      @default(0)
+
+  createdAt    DateTime @default(now())
+}

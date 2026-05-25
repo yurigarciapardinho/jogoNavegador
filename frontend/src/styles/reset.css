@@ -1,0 +1,38 @@
+/* Reset básico e configurações iniciais conforme orientação para jogos */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--corFundo);
+  color: var(--corTextoPrincipal);
+  overflow: hidden; /* Comum para jogos em fullscreen */
+}
+
+h1, h2, h3, h4, h5, h6, p {
+  margin: 0;
+}
+
+ul, ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+input {
+  font-family: inherit;
+  border: none;
+  outline: none;
+}

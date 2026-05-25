@@ -1,0 +1,37 @@
+:root {
+  /* Cores de Interface */
+  --corFundo: #0f172a; /* slate-900 */
+  --corFundoEscuro: #020617; /* slate-950 */
+  --corPainel: #1e293b; /* slate-800 */
+  --corBorda: #334155; /* slate-700 */
+  
+  --corTextoPrincipal: #f8fafc; /* slate-50 */
+  --corTextoSecundario: #94a3b8; /* slate-400 */
+  
+  --corPrimaria: #ca8a04; /* yellow-600 */
+  --corPrimariaHover: #eab308; /* yellow-500 */
+  
+  --corSucesso: #16a34a; /* green-600 */
+  --corSucessoHover: #15803d; /* green-700 */
+  
+  --corPerigo: #dc2626; /* red-600 */
+  --corPerigoHover: #b91c1c; /* red-700 */
+  
+  /* Medidas de UI */
+  --espacamentoPequeno: 8px;
+  --espacamentoMedio: 16px;
+  --espacamentoGrande: 32px;
+  --bordaArredondada: 8px;
+  
+  /* Configurações do Jogo */
+  --velocidadeTransicao: 0.2s;
+  --duracaoDano: 0.4s;
+
+  /* Camadas (z-index) */
+  --camadaFundo: 1;
+  --camadaJogo: 10;
+  --camadaCabecalho: 50;
+  --camadaHud: 100;
+  --camadaMenuFlutuante: 500;
+  --camadaModal: 1000;
+}

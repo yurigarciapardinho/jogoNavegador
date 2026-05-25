@@ -1,0 +1,48 @@
+{
+  "name": "tw2-clone-backend",
+  "version": "1.0.0",
+  "description": "Motor de backend para o jogo de navegador estilo TW2",
+  "private": true,
+  "_watermark": "Criado por @yurigarciapardinho",
+  "author": "Yuri Garcia Pardinho <@yurigarciapardinho>",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "NODE_ENV=development tsx watch src/server.ts",
+    "start": "NODE_ENV=production tsx src/server.ts",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate",
+    "test": "echo \"Testes automatizados em breve\" && exit 0"
+  },
+  "keywords": [
+    "fastify",
+    "prisma",
+    "typescript",
+    "tw2-clone",
+    "game-backend",
+    "yurigarciapardinho"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/jwt": "^10.1.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@prisma/config": "^7.8.0",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.8.5",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^25.9.1",
+    "prisma": "^7.8.0",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}
