@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
+import { api } from '../api'
 
 export default function TelaRelatorios() {
     const { token, usuario, adicionarNotificacao } = usarEstadoJogo()
@@ -9,16 +10,13 @@ export default function TelaRelatorios() {
 
     useEffect(() => {
         if (token) {
-            fetch('http://localhost:8080/reports', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(resposta => resposta.json())
+            api.get('/reports', token)
             .then(dados => {
                 definirRelatorios(dados)
                 definirCarregando(false)
             })
             .catch(erro => {
-                adicionarNotificacao('Falha ao carregar relatórios.', 'erro')
+                adicionarNotificacao(erro.message || 'Falha ao carregar relatórios.', 'erro')
                 definirCarregando(false)
             })
         }
@@ -128,18 +126,23 @@ export default function TelaRelatorios() {
                                     <tbody>
                                         <tr>
                                             <td style={{ textAlign: 'left', fontWeight: 'bold' }}>Tropas</td>
-                                            <td>{relatorioSelecionado.defSpear === -1 ? '???' : relatorioSelecionado.defSpear}</td>
-                                            <td>{relatorioSelecionado.defSword === -1 ? '???' : relatorioSelecionado.defSword}</td>
-                                            <td>{relatorioSelecionado.defAxe === -1 ? '???' : relatorioSelecionado.defAxe}</td>
+                                            <td style={{ color: relatorioSelecionado.defSpear === -1 ? 'var(--corPerigo)' : 'inherit' }}>{relatorioSelecionado.defSpear === -1 ? '???' : relatorioSelecionado.defSpear}</td>
+                                            <td style={{ color: relatorioSelecionado.defSword === -1 ? 'var(--corPerigo)' : 'inherit' }}>{relatorioSelecionado.defSword === -1 ? '???' : relatorioSelecionado.defSword}</td>
+                                            <td style={{ color: relatorioSelecionado.defAxe === -1 ? 'var(--corPerigo)' : 'inherit' }}>{relatorioSelecionado.defAxe === -1 ? '???' : relatorioSelecionado.defAxe}</td>
                                         </tr>
                                         <tr>
                                             <td style={{ textAlign: 'left', fontWeight: 'bold', color: 'var(--corPerigo)', paddingTop: '8px' }}>Perdas</td>
-                                            <td style={{ color: '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostSpear === -1 ? '???' : relatorioSelecionado.defLostSpear}</td>
-                                            <td style={{ color: '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostSword === -1 ? '???' : relatorioSelecionado.defLostSword}</td>
-                                            <td style={{ color: '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostAxe === -1 ? '???' : relatorioSelecionado.defLostAxe}</td>
+                                            <td style={{ color: relatorioSelecionado.defLostSpear === -1 ? 'var(--corPerigo)' : '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostSpear === -1 ? '???' : relatorioSelecionado.defLostSpear}</td>
+                                            <td style={{ color: relatorioSelecionado.defLostSword === -1 ? 'var(--corPerigo)' : '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostSword === -1 ? '???' : relatorioSelecionado.defLostSword}</td>
+                                            <td style={{ color: relatorioSelecionado.defLostAxe === -1 ? 'var(--corPerigo)' : '#fca5a5', paddingTop: '8px' }}>{relatorioSelecionado.defLostAxe === -1 ? '???' : relatorioSelecionado.defLostAxe}</td>
                                         </tr>
                                     </tbody>
                                 </table>
+                                {relatorioSelecionado.defSpear === -1 && (
+                                    <div style={{ textAlign: 'center', color: 'var(--corPerigo)', fontWeight: 'bold', marginTop: 'var(--espacamentoMedio)', fontSize: '0.875rem' }}>
+                                        Nenhuma de suas tropas sobreviveu para relatar as defesas inimigas.
+                                    </div>
+                                )}
                             </div>
 
                             {/* Saque */}

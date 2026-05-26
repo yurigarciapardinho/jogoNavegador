@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { MotorMapa } from '../game/MotorMapa'
+import { api } from '../api'
 import { usarEstadoJogo } from '../store/estadoJogo'
 
 export default function TelaMapa() {
@@ -21,10 +22,7 @@ export default function TelaMapa() {
     useEffect(() => {
         let estaMontado = true
         if (token && usuario) {
-            fetch('http://localhost:8080/me/villages', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(resposta => resposta.json())
+            api.get('/me/villages', token)
             .then(dados => {
                 if (estaMontado && dados.length > 0) {
                     definirIdAldeiaOrigem(dados[0].id)
@@ -98,33 +96,21 @@ export default function TelaMapa() {
         }
 
         try {
-            const resposta = await fetch('http://localhost:8080/village/attack', {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    originId: idAldeiaOrigem,
-                    targetId: aldeiaSelecionada.id,
-                    spear: qtdLanceiro,
-                    sword: qtdEspadachim,
-                    axe: qtdBarbaro
-                })
-            })
+            await api.post('/village/attack', {
+                originId: idAldeiaOrigem,
+                targetId: aldeiaSelecionada.id,
+                spear: qtdLanceiro,
+                sword: qtdEspadachim,
+                axe: qtdBarbaro
+            }, token)
 
-            const dados = await resposta.json()
-            if (resposta.ok) {
-                adicionarNotificacao(`${tipo === 'ATTACK' ? 'Ataque' : 'Apoio'} enviado com sucesso!`, 'sucesso')
-                definirAldeiaSelecionada(null)
-                definirQtdLanceiro(0)
-                definirQtdEspadachim(0)
-                definirQtdBarbaro(0)
-            } else {
-                adicionarNotificacao(`Erro: ${dados.error}`, 'erro')
-            }
-        } catch (erro) {
-            adicionarNotificacao('Erro ao enviar movimento de tropas.', 'erro')
+            adicionarNotificacao(`${tipo === 'ATTACK' ? 'Ataque' : 'Apoio'} enviado com sucesso!`, 'sucesso')
+            definirAldeiaSelecionada(null)
+            definirQtdLanceiro(0)
+            definirQtdEspadachim(0)
+            definirQtdBarbaro(0)
+        } catch (erro: any) {
+            adicionarNotificacao(erro.message || 'Erro ao enviar movimento de tropas.', 'erro')
         }
     }
 

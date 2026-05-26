@@ -111,6 +111,27 @@ CORS_ORIGIN="*"
 EOF
 fi
 
+# Configuração de Rede Local
+echo ""
+echo -e "${CIANO}${BOLD}Deseja permitir acesso pela rede local? (Para jogar no celular via Wi-Fi)${RESET}"
+read -p "Escolha [S/N] (Padrão N): " OPCAO_REDE
+
+HOST_ENV="127.0.0.1"
+FRONTEND_ARGS=""
+IP_LOCAL="localhost"
+
+if [[ "$OPCAO_REDE" =~ ^[SsYy]$ ]]; then
+    HOST_ENV="0.0.0.0"
+    FRONTEND_ARGS="--host"
+    IP_LOCAL=$(hostname -I | awk '{print $1}')
+    if [ -z "$IP_LOCAL" ]; then
+        IP_LOCAL="localhost"
+    fi
+    echo -e "${VERDE}[Rede] Acesso local habilitado. IP: $IP_LOCAL${RESET}"
+else
+    echo -e "${AMARELO}[Rede] Acesso restrito ao localhost.${RESET}"
+fi
+
 # Verifica .env do frontend — cria do exemplo se não existir
 if [ ! -f "$DIR_FRONTEND/.env" ]; then
     echo -e "${AMARELO}[AVISO] Arquivo frontend/.env não encontrado.${RESET}"
@@ -118,6 +139,10 @@ if [ ! -f "$DIR_FRONTEND/.env" ]; then
     cp "$DIR_FRONTEND/.env.example" "$DIR_FRONTEND/.env"
     echo -e "${VERDE}        frontend/.env criado. Edite-o com o VITE_VILLAGE_ID correto.${RESET}"
 fi
+
+# Atualiza VITE_API_URL no frontend para apontar para o IP local caso seja habilitado
+# Para facilitar, a URL dinâmica ficará a cargo do frontend (window.location.hostname),
+# mas podemos atualizar o VITE_API_URL apenas por segurança.
 
 # Instala dependências do backend se necessário
 if [ ! -d "$DIR_BACKEND/node_modules" ]; then
@@ -136,8 +161,14 @@ fi
 echo ""
 echo -e "${VERDE}${BOLD}✓ Verificações concluídas. Iniciando serviços...${RESET}"
 echo ""
-echo -e "  ${AZUL}${BOLD}Backend:${RESET}   http://localhost:8080"
-echo -e "  ${CIANO}${BOLD}Frontend:${RESET}  http://localhost:5173"
+if [[ "$OPCAO_REDE" =~ ^[SsYy]$ ]]; then
+    echo -e "  ${AZUL}${BOLD}Backend API:${RESET} http://${IP_LOCAL}:8080"
+    echo -e "  ${CIANO}${BOLD}Jogo (Web):${RESET}  http://${IP_LOCAL}:5173"
+    echo -e "  ${AMARELO}Acesse a URL do Jogo no navegador do seu celular!${RESET}"
+else
+    echo -e "  ${AZUL}${BOLD}Backend:${RESET}   http://localhost:8080"
+    echo -e "  ${CIANO}${BOLD}Frontend:${RESET}  http://localhost:5173"
+fi
 echo ""
 echo -e "${AMARELO}Pressione Ctrl+C para encerrar ambos os serviços.${RESET}"
 echo -e "${BOLD}--------------------------------------------${RESET}"
@@ -146,7 +177,7 @@ echo ""
 # ─── Inicia o backend em background com prefixo nos logs ─────────────────────
 (
     cd "$DIR_BACKEND"
-    npm run dev 2>&1 | while IFS= read -r linha; do
+    HOST="$HOST_ENV" npm run dev 2>&1 | while IFS= read -r linha; do
         printf "\033[0;34m[Backend] \033[0m%s\n" "$linha"
     done
 ) &
@@ -158,7 +189,7 @@ sleep 2
 # ─── Inicia o frontend em background com prefixo nos logs ────────────────────
 (
     cd "$DIR_FRONTEND"
-    npm run dev 2>&1 | while IFS= read -r linha; do
+    npm run dev -- $FRONTEND_ARGS 2>&1 | while IFS= read -r linha; do
         printf "\033[0;36m[Frontend]\033[0m%s\n" "$linha"
     done
 ) &

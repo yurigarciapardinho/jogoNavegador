@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 
-const URL_API = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+import { api } from '../api'
 
 export default function TelaAldeia() {
     const { recursos, definirRecursos, token, adicionarNotificacao } = usarEstadoJogo()
@@ -20,35 +20,30 @@ export default function TelaAldeia() {
 
     const buscarAldeia = async () => {
         try {
-            const respostaMe = await fetch(`${URL_API}/me/villages`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            const dadosMe = await respostaMe.json()
+            const dadosMeResponse = await api.get('/me/villages', token)
             
-            if (respostaMe.ok && dadosMe.length > 0) {
-                const idAldeia = dadosMe[0].id
-                const resposta = await fetch(`${URL_API}/village/${idAldeia}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
-                const dados = await resposta.json()
+            // O backend agora retorna { villages, globalMessage, role }
+            const { villages, globalMessage } = dadosMeResponse
+            
+            usarEstadoJogo.getState().definirMensagemGlobal(globalMessage || null)
+            
+            if (villages && villages.length > 0) {
+                const idAldeia = villages[0].id
+                const dados = await api.get(`/village/${idAldeia}`, token)
                 
-                if (resposta.ok) {
-                    definirDadosAldeia(dados)
-                    definirRecursos({
-                        madeira: dados.resources.wood || 0,
-                        argila: dados.resources.clay || 0,
-                        ferro: dados.resources.iron || 0
-                    })
-                    definirFilaAtiva(dados.activeQueue || [])
-                    definirFilaUnidadesAtiva(dados.activeUnitQueue || [])
-                } else {
-                    definirErroBusca(dados.error)
-                }
+                definirDadosAldeia(dados)
+                definirRecursos({
+                    madeira: dados.resources.wood || 0,
+                    argila: dados.resources.clay || 0,
+                    ferro: dados.resources.iron || 0
+                })
+                definirFilaAtiva(dados.activeQueue || [])
+                definirFilaUnidadesAtiva(dados.activeUnitQueue || [])
             } else {
                 definirErroBusca('Nenhuma aldeia encontrada para esta conta.')
             }
-        } catch {
-            definirErroBusca('Erro ao conectar com o backend.')
+        } catch (erro: any) {
+            definirErroBusca(erro.message || 'Erro ao conectar com o backend.')
         }
     }
 
@@ -60,24 +55,11 @@ export default function TelaAldeia() {
         if (!dadosAldeia) return
         definirCarregandoConstrucao(true)
         try {
-            const resposta = await fetch(`${URL_API}/village/build`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
-                },
-                body: JSON.stringify({ villageId: dadosAldeia.id, buildingType: tipoEdificio })
-            })
-            
-            if (resposta.ok) {
-                adicionarNotificacao('Construção iniciada com sucesso!', 'sucesso')
-                await buscarAldeia()
-            } else {
-                const erro = await resposta.json()
-                adicionarNotificacao(erro.error, 'erro')
-            }
-        } catch {
-            adicionarNotificacao('Erro ao enviar ordem de construção.', 'erro')
+            await api.post('/village/build', { villageId: dadosAldeia.id, buildingType: tipoEdificio }, token)
+            adicionarNotificacao('Construção iniciada com sucesso!', 'sucesso')
+            await buscarAldeia()
+        } catch (erro: any) {
+            adicionarNotificacao(erro.message || 'Erro ao enviar ordem de construção.', 'erro')
         } finally {
             definirCarregandoConstrucao(false)
         }
@@ -113,21 +95,12 @@ export default function TelaAldeia() {
         if (!quantidade || quantidade <= 0 || !dadosAldeia) return
         definirCarregandoConstrucao(true)
         try {
-            const resposta = await fetch(`${URL_API}/village/recruit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ villageId: dadosAldeia.id, unitType: tipoUnidade, amount: quantidade })
-            })
-            if (resposta.ok) {
-                adicionarNotificacao(`Treinamento de ${quantidade} tropas iniciado!`, 'sucesso')
-                definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipoUnidade]: 0 })
-                await buscarAldeia()
-            } else {
-                const erro = await resposta.json()
-                adicionarNotificacao(erro.error, 'erro')
-            }
-        } catch {
-            adicionarNotificacao('Erro ao enviar ordem de recrutamento.', 'erro')
+            await api.post('/village/recruit', { villageId: dadosAldeia.id, unitType: tipoUnidade, amount: quantidade }, token)
+            adicionarNotificacao(`Treinamento de ${quantidade} tropas iniciado!`, 'sucesso')
+            definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipoUnidade]: 0 })
+            await buscarAldeia()
+        } catch (erro: any) {
+            adicionarNotificacao(erro.message || 'Erro ao enviar ordem de recrutamento.', 'erro')
         } finally {
             definirCarregandoConstrucao(false)
         }

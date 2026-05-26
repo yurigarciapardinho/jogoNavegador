@@ -4,10 +4,12 @@ import TelaAldeia from './components/TelaAldeia'
 import TelaMapa from './components/TelaMapa'
 import TelaLogin from './components/TelaLogin'
 import TelaRelatorios from './components/TelaRelatorios'
+import TelaAdministracao from './components/admin/TelaAdministracao'
 import GerenciadorNotificacoes from './components/GerenciadorNotificacoes'
+import VigiaDeBatalha from './components/VigiaDeBatalha'
 
 const App: React.FC = () => {
-    const { telaAtual, definirTela, token, usuario, realizarLogout } = usarEstadoJogo()
+    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal } = usarEstadoJogo()
 
     if (!token) {
         return (
@@ -26,6 +28,8 @@ const App: React.FC = () => {
                 return <TelaMapa />
             case 'relatorios':
                 return <TelaRelatorios />
+            case 'admin':
+                return <TelaAdministracao />
             default:
                 return <TelaAldeia />
         }
@@ -34,30 +38,51 @@ const App: React.FC = () => {
     return (
         <div className="aplicativoRaiz">
             <GerenciadorNotificacoes />
+            <VigiaDeBatalha />
+            
+            {mensagemGlobal && (
+                <div style={{ backgroundColor: '#b91c1c', color: 'white', padding: '10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #7f1d1d' }}>
+                    📢 AVISO GLOBAL: {mensagemGlobal}
+                </div>
+            )}
+            
             <header className="cabecalhoJogo">
                 <div className="cabecalhoJogo_areaLogo">
                     <div className="cabecalhoJogo_logo">TW2 Clone</div>
                     {usuario && <span className="cabecalhoJogo_nomeJogador">Senhor(a) {usuario.nomeUsuario}</span>}
                 </div>
                 <nav className="navegacaoPrincipal">
-                    <button 
-                        onClick={() => definirTela('aldeia')}
-                        className={`botaoGeral ${telaAtual === 'aldeia' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
-                    >
-                        Aldeia
-                    </button>
+                    {usuario?.role !== 'ADMIN' && (
+                        <>
+                            <button 
+                                onClick={() => definirTela('aldeia')}
+                                className={`botaoGeral ${telaAtual === 'aldeia' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
+                            >
+                                Aldeia
+                            </button>
+                            <button 
+                                onClick={() => definirTela('relatorios')}
+                                className={`botaoGeral ${telaAtual === 'relatorios' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
+                            >
+                                Relatórios
+                            </button>
+                        </>
+                    )}
                     <button 
                         onClick={() => definirTela('mapa')}
                         className={`botaoGeral ${telaAtual === 'mapa' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
                     >
                         Mapa
                     </button>
-                    <button 
-                        onClick={() => definirTela('relatorios')}
-                        className={`botaoGeral ${telaAtual === 'relatorios' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
-                    >
-                        Relatórios
-                    </button>
+                    {usuario?.role === 'ADMIN' && (
+                        <button 
+                            onClick={() => definirTela('admin')}
+                            className={`botaoGeral ${telaAtual === 'admin' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
+                            style={{ border: '2px solid var(--corSucesso)' }}
+                        >
+                            Painel Admin
+                        </button>
+                    )}
                     <button 
                         onClick={realizarLogout}
                         className="botaoGeral botaoGeral--perigo"

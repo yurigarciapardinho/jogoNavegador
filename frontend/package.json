@@ -18,14 +18,17 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:lan": "vite --host",
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "test": "echo \"Testes automatizados em breve\" && exit 0"
   },
   "dependencies": {
+    "lucide-react": "^1.16.0",
     "pixi.js": "^8.18.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "recharts": "^3.8.1",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

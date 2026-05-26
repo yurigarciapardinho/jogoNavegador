@@ -122,12 +122,11 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
                 }
             }, 50)
 
-            const token = fastify.jwt.sign({ id: newUser.id, username: newUser.username })
+            const token = fastify.jwt.sign({ id: newUser.id, username: newUser.username, role: newUser.role })
             return { token, message: 'Conta criada com sucesso.' }
 
         } catch (error) {
-            fastify.log.error({ error }, 'Erro ao criar usuário')
-            return reply.code(500).send({ error: 'Erro ao criar conta. Tente novamente mais tarde.' })
+            throw error
         }
     })
 
@@ -141,12 +140,17 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
         const username = body.username.trim()
         const password = body.password
 
-        const user = await prisma.user.findUnique({
-            where: { username }
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { username: username },
+                    { email: username.toLowerCase() }
+                ]
+            }
         })
 
         if (!user) {
-            return reply.code(401).send({ error: 'Usuário não encontrado.' })
+            return reply.code(401).send({ error: 'E-mail, usuário ou senha incorretos.' })
         }
 
         const senhaValida = await bcrypt.compare(password, user.passwordHash)
@@ -155,7 +159,7 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
             return reply.code(401).send({ error: 'Senha incorreta.' })
         }
 
-        const token = fastify.jwt.sign({ id: user.id, username: user.username })
+        const token = fastify.jwt.sign({ id: user.id, username: user.username, role: user.role })
         return { token }
     })
 }

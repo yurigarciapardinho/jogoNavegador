@@ -1,7 +1,4 @@
-import { PrismaClient } from '@prisma/client'
 import { getUnitStats } from './unitEconomy'
-
-const prisma = new PrismaClient()
 
 const calculateCombat = (atkUnits: any, defUnits: any) => {
     let atkPower = 0
@@ -48,7 +45,7 @@ const calculateCombat = (atkUnits: any, defUnits: any) => {
     }
 }
 
-export const startCombatLoop = () => {
+export const startCombatLoop = (prisma: any) => {
     setInterval(async () => {
         try {
             const now = new Date()
@@ -140,7 +137,7 @@ export const startCombatLoop = () => {
                         }
 
                         // Só retorna as tropas se venceu e sobraram
-                        const returnTime = new Date(now.getTime() + 60000)
+                        const returnTime = new Date(now.getTime() + (now.getTime() - mov.startTime.getTime())) // Tempo de volta = tempo de ida
                         await prisma.movement.create({
                             data: {
                                 type: 'RETURN',
@@ -149,23 +146,12 @@ export const startCombatLoop = () => {
                                 spear: combatResult.survivingAtk.spear,
                                 sword: combatResult.survivingAtk.sword,
                                 axe: combatResult.survivingAtk.axe,
+                                wood: lootedWood,
+                                clay: lootedClay,
+                                iron: lootedIron,
                                 arrivalTime: returnTime,
                             }
                         })
-
-                        if (lootedWood > 0 || lootedClay > 0 || lootedIron > 0) {
-                            const originRes = mov.origin.resources
-                            if (originRes) {
-                                await prisma.villageResource.update({
-                                    where: { villageId: mov.originId },
-                                    data: {
-                                        wood: originRes.wood + lootedWood,
-                                        clay: originRes.clay + lootedClay,
-                                        iron: originRes.iron + lootedIron
-                                    }
-                                })
-                            }
-                        }
                     }
 
                     let reportDefSpear = targetUnits.spear
@@ -220,18 +206,31 @@ export const startCombatLoop = () => {
                     // Tropas chegaram de volta em casa
                     const originVillage = await prisma.village.findUnique({
                         where: { id: mov.targetId }, // O target do RETURN é a aldeia de origem
-                        include: { units: true }
+                        include: { units: true, resources: true }
                     })
 
-                    if (originVillage && originVillage.units) {
-                        await prisma.villageUnit.update({
-                            where: { villageId: originVillage.id },
-                            data: {
-                                spear: originVillage.units.spear + mov.spear,
-                                sword: originVillage.units.sword + mov.sword,
-                                axe: originVillage.units.axe + mov.axe
-                            }
-                        })
+                    if (originVillage) {
+                        if (originVillage.units) {
+                            await prisma.villageUnit.update({
+                                where: { villageId: originVillage.id },
+                                data: {
+                                    spear: originVillage.units.spear + mov.spear,
+                                    sword: originVillage.units.sword + mov.sword,
+                                    axe: originVillage.units.axe + mov.axe
+                                }
+                            })
+                        }
+                        
+                        if (originVillage.resources && (mov.wood > 0 || mov.clay > 0 || mov.iron > 0)) {
+                            await prisma.villageResource.update({
+                                where: { villageId: originVillage.id },
+                                data: {
+                                    wood: originVillage.resources.wood + mov.wood,
+                                    clay: originVillage.resources.clay + mov.clay,
+                                    iron: originVillage.resources.iron + mov.iron
+                                }
+                            })
+                        }
                     }
 
                     await prisma.movement.update({

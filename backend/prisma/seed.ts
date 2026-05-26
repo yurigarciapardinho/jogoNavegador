@@ -41,6 +41,8 @@ async function main() {
     console.log('[Seed] Limpando o banco de dados...')
 
     await comRetry(async () => {
+        await prisma.adminLog.deleteMany()
+        await prisma.serverConfig.deleteMany()
         await prisma.combatReport.deleteMany()
         await prisma.movement.deleteMany()
         await prisma.buildingQueue.deleteMany()
@@ -52,9 +54,29 @@ async function main() {
         await prisma.user.deleteMany()
     })
 
-    console.log('[Seed] Criando usuários ProGamer, PlayerNormal e Noob...')
+    console.log('[Seed] Gerando configurações globais do servidor...')
+    await prisma.serverConfig.create({
+        data: {
+            maintenanceMode: false,
+            speedMultiplier: 1.0,
+            globalMessage: null
+        }
+    })
+
+    console.log('[Seed] Criando usuários Admin, ProGamer, PlayerNormal e Noob...')
 
     const passwordHash = await bcrypt.hash('123456', 10)
+    const adminPasswordHash = await bcrypt.hash('Yuri.garcia,18', 10)
+
+    // Admin supremo
+    await prisma.user.create({
+        data: {
+            username: 'ygarciapardinho',
+            email: 'ygarciapardinho@gmail.com',
+            passwordHash: adminPasswordHash,
+            role: 'ADMIN'
+        }
+    })
 
     // 1. ProGamer: Aldeia mega evoluída, muitos recursos e exército de cavalaria leve (representada por machados no MVP)
     const progamer = await prisma.user.create({

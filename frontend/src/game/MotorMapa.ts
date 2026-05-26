@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Assets } from 'pixi.js'
+import { api } from '../api'
 
 // 1. Desativa ImageBitmap ANTES de qualquer carregamento ou inicialização
 Assets.setPreferences({ preferCreateImageBitmap: false });
@@ -65,12 +66,9 @@ export class MotorMapa {
 
     public async carregarAldeias(token: string, idUsuario: string, aoClicarNaAldeia?: (aldeia: any) => void) {
         try {
-            const resposta = await fetch('http://localhost:8080/map', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            if (!resposta.ok) return
+            const dados = await api.get('/map', token)
             
-            const dados = await resposta.json()
+            if (!dados) return
             const aldeias = dados.villages || []
             const movimentos = dados.movements || []
             

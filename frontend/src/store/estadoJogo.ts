@@ -6,11 +6,12 @@ interface Recursos {
     ferro: number
 }
 
-export type NomeTela = 'aldeia' | 'mapa' | 'relatorios' | 'tribo'
+export type NomeTela = 'aldeia' | 'mapa' | 'relatorios' | 'tribo' | 'admin'
 
 interface EstadoUsuario {
     id: string
     nomeUsuario: string
+    role?: 'PLAYER' | 'ADMIN'
 }
 
 export interface Notificacao {
@@ -22,6 +23,8 @@ export interface Notificacao {
 interface EstadoJogo {
     recursos: Recursos
     definirRecursos: (recursos: Recursos) => void
+    mensagemGlobal: string | null
+    definirMensagemGlobal: (msg: string | null) => void
     telaAtual: NomeTela
     definirTela: (tela: NomeTela) => void
     token: string | null
@@ -36,7 +39,18 @@ interface EstadoJogo {
 export const usarEstadoJogo = create<EstadoJogo>((set) => ({
     recursos: { madeira: 0, argila: 0, ferro: 0 },
     definirRecursos: (recursos) => set({ recursos }),
-    telaAtual: 'aldeia',
+    mensagemGlobal: null,
+    definirMensagemGlobal: (msg) => set({ mensagemGlobal: msg }),
+    telaAtual: (() => {
+        try {
+            const token = localStorage.getItem('tw2_token')
+            if (token) {
+                const payload = JSON.parse(atob(token.split('.')[1]))
+                if (payload.role === 'ADMIN') return 'admin'
+            }
+        } catch {}
+        return 'aldeia'
+    })() as NomeTela,
     definirTela: (tela) => set({ telaAtual: tela }),
     token: localStorage.getItem('tw2_token'),
     usuario: (() => {
@@ -44,7 +58,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set) => ({
             const token = localStorage.getItem('tw2_token')
             if (token) {
                 const payload = JSON.parse(atob(token.split('.')[1]))
-                return { id: payload.id, nomeUsuario: payload.username }
+                return { id: payload.id, nomeUsuario: payload.username, role: payload.role }
             }
             return null
         } catch { return null }
@@ -68,7 +82,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set) => ({
     })),
     realizarLogin: (token, usuario) => {
         localStorage.setItem('tw2_token', token)
-        set({ token, usuario, telaAtual: 'aldeia' })
+        set({ token, usuario, telaAtual: usuario.role === 'ADMIN' ? 'admin' : 'aldeia' })
     },
     realizarLogout: () => {
         localStorage.removeItem('tw2_token')

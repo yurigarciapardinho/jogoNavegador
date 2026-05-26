@@ -27,6 +27,7 @@ if (!conselheiroUrl) {
 
 import fastifyJwt from '@fastify/jwt'
 import authRoutes from './routes/auth'
+import adminRoutes from './routes/admin'
 
 declare module 'fastify' {
     export interface FastifyInstance {
@@ -36,13 +37,55 @@ declare module 'fastify' {
 
 const fastify = Fastify({ logger: true })
 
+fastify.setErrorHandler((error, request, reply) => {
+    // Se o erro for uma falha de validação gerada pelo Fastify ou similar
+    if (error.statusCode && error.statusCode < 500) {
+        return reply.code(error.statusCode).send({ error: error.message })
+    }
+
+    // Falhas de banco de dados ou exceções inesperadas geram 500
+    if (process.env.NODE_ENV !== 'production') {
+        fastify.log.error(error)
+        return reply.code(500).send({ error: error.message, stack: error.stack })
+    } else {
+        // Em produção, escondemos os detalhes do erro
+        fastify.log.error(error.message)
+        return reply.code(500).send({ error: 'Ocorreu um erro interno no servidor. Tente novamente mais tarde.' })
+    }
+})
+
 const pool = new Pool({ connectionString: databaseUrl })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
+import fastifyRateLimit from '@fastify/rate-limit'
+
 fastify.register(cors, {
     origin: process.env.CORS_ORIGIN ?? '*',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+})
+
+fastify.register(fastifyRateLimit, {
+    max: 100, // global limit
+    timeWindow: '1 minute'
+})
+
+fastify.addHook('preHandler', async (request, reply) => {
+    // Rotas de autenticação ou leitura não restrita não devem ser totalmente bloqueadas para admins tentarem logar
+    if (request.routerPath?.startsWith('/auth/')) return
+
+    const config = await prisma.serverConfig.findFirst()
+    if (config?.maintenanceMode) {
+        // Permitir admins de continuar
+        try {
+            await request.jwtVerify()
+            const user = request.user as { role: string }
+            if (user.role === 'ADMIN') return
+        } catch {
+            // Se não tá logado, bloqueia
+        }
+        return reply.code(503).send({ error: 'O servidor está em manutenção no momento. Tente novamente mais tarde.' })
+    }
 })
 
 fastify.register(fastifyJwt, {
@@ -58,16 +101,23 @@ fastify.decorate('authenticate', async (request: any, reply: any) => {
 })
 
 fastify.register(authRoutes, { prisma })
+fastify.register(adminRoutes, { prisma })
 
 fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (request, reply) => {
-    const user = request.user as { id: string, username: string }
-    
+    const user = request.user as { id: string, username: string, role?: string }
+
     const villages = await prisma.village.findMany({
         where: { userId: user.id },
         include: { resources: true, buildings: true, units: true }
     })
-    
-    return villages
+
+    const config = await prisma.serverConfig.findFirst()
+
+    return { 
+        villages, 
+        globalMessage: config?.globalMessage || null,
+        role: user.role 
+    }
 })
 
 fastify.get('/map', { preValidation: [fastify.authenticate] }, async (request, reply) => {
@@ -122,7 +172,13 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     })
 
     const startTime = lastQueue ? new Date(lastQueue.endTime) : new Date()
-    const recruitTimeSec = getRecruitTime(unitType, amount, village.buildings.barracks)
+    
+    const config = await prisma.serverConfig.findFirst()
+    const speedMultiplier = config?.speedMultiplier || 1.0
+    
+    let recruitTimeSec = getRecruitTime(unitType, amount, village.buildings.barracks)
+    recruitTimeSec = Math.max(1, Math.floor(recruitTimeSec / speedMultiplier)) // Não pode ser 0 segundos
+    
     const endTime = new Date(startTime.getTime() + recruitTimeSec * 1000)
 
     try {
@@ -165,6 +221,11 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     return { message: 'Recrutamento enviado para a fila', cost, endTime }
 })
 
+import { startCombatLoop } from './gameLogic/combatLoop'
+
+// Inicia o motor de combate do jogo (varre o DB buscando ataques/retornos que chegaram ao destino)
+startCombatLoop(prisma)
+
 fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string }
     const { originId, targetId, spear = 0, sword = 0, axe = 0 } = request.body as any
@@ -182,7 +243,7 @@ fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async
         return reply.code(400).send({ error: 'Você não tem essa quantidade de tropas.' })
     }
 
-    // Deduz tropas (em um projeto real deveria usar transaction)
+    // Deduz tropas
     await prisma.villageUnit.update({
         where: { villageId: origin.id },
         data: {
@@ -192,7 +253,18 @@ fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async
         }
     })
 
-    const arrivalTime = new Date(Date.now() + 60000) // MVP: 1 minuto de viagem fixa
+    // Calcula a distância: √( (x2-x1)² + (y2-y1)² )
+    const dx = target.x - origin.x
+    const dy = target.y - origin.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    // TEMPO_BASE = 30 segundos por bloco para o MVP
+    const config = await prisma.serverConfig.findFirst()
+    const speedMultiplier = config?.speedMultiplier || 1.0
+
+    let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+    // Impede que o tempo seja menor que 1 segundo
+    const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
 
     const mov = await prisma.movement.create({
         data: {
@@ -252,7 +324,13 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
         startTime = new Date(village.buildQueues[0].endTime)
     }
 
-    const endTime = new Date(startTime.getTime() + cost.timeSec * 1000)
+    const config = await prisma.serverConfig.findFirst()
+    const speedMultiplier = config?.speedMultiplier || 1.0
+
+    let buildTimeSec = cost.timeSec
+    buildTimeSec = Math.max(1, Math.floor(buildTimeSec / speedMultiplier))
+
+    const endTime = new Date(startTime.getTime() + buildTimeSec * 1000)
 
     // Subtrai recursos e adiciona na fila numa transaction protegida (Atomic Update)
     try {
@@ -401,7 +479,10 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
         const msMpassados = agora.getTime() - ultimaAtualizacao.getTime()
         const horasPassadas = msMpassados / (1000 * 60 * 60)
 
-        const PRODUCAO_BASE_POR_HORA = 300 // MVP
+        const config = await prisma.serverConfig.findFirst()
+        const speedMultiplier = config?.speedMultiplier || 1.0
+
+        const PRODUCAO_BASE_POR_HORA = 300 * speedMultiplier // MVP + Multiplicador de Evento
 
         const novaMadeira = village.resources.wood + (village.buildings.timberCamp * PRODUCAO_BASE_POR_HORA * horasPassadas)
         const novaArgila  = village.resources.clay  + (village.buildings.clayPit    * PRODUCAO_BASE_POR_HORA * horasPassadas)
@@ -472,7 +553,7 @@ const iniciarServidor = async () => {
 
     for (let tentativa = 0; tentativa < tentativasMax; tentativa++) {
         try {
-            await fastify.listen({ port: portaAtual })
+            await fastify.listen({ port: portaAtual, host: process.env.HOST || '127.0.0.1' })
             console.log('========================================')
             console.log('TW2 Clone — Servidor iniciado (YGP)')
             console.log(`Backend: http://localhost:${portaAtual}`)

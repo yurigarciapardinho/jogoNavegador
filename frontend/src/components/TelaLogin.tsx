@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
+import { api } from '../api'
 
 const TelaLogin: React.FC = () => {
     const { realizarLogin, adicionarNotificacao } = usarEstadoJogo()
@@ -48,38 +49,26 @@ const TelaLogin: React.FC = () => {
 
         definirCarregando(true)
 
-        const urlAPI = modoLogin ? 'http://localhost:8080/auth/login' : 'http://localhost:8080/auth/register'
+        const urlAPI = modoLogin ? '/auth/login' : '/auth/register'
         const corpoRequisicao = modoLogin 
             ? { username: nomeInformado, password: senhaInformada } 
             : { email: emailInformado, username: nomeInformado, password: senhaInformada }
 
         try {
-            const resposta = await fetch(urlAPI, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(corpoRequisicao)
-            })
-
-            const dados = await resposta.json()
-
-            if (!resposta.ok) {
-                adicionarNotificacao(dados.error || 'Erro na requisição', 'erro')
-                definirCarregando(false)
-                return
-            }
+            const dados = await api.post(urlAPI, corpoRequisicao)
 
             if (modoLogin) {
                 // Parse JWT to get user
                 const payload = JSON.parse(atob(dados.token.split('.')[1]))
-                realizarLogin(dados.token, { id: payload.id, nomeUsuario: payload.username })
+                realizarLogin(dados.token, { id: payload.id, nomeUsuario: payload.username, role: payload.role })
                 adicionarNotificacao('Login realizado com sucesso!', 'sucesso')
             } else {
                 adicionarNotificacao('Conta criada com sucesso! Faça login.', 'sucesso')
                 definirModoLogin(true)
                 definirSenha('')
             }
-        } catch (erro) {
-            adicionarNotificacao('Erro de conexão com o servidor.', 'erro')
+        } catch (erro: any) {
+            adicionarNotificacao(erro.message || 'Erro de conexão com o servidor.', 'erro')
         } finally {
             definirCarregando(false)
         }
