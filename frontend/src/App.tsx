@@ -13,10 +13,10 @@ const App: React.FC = () => {
 
     if (!token) {
         return (
-            <>
+            <div className="aplicativoRaiz">
                 <GerenciadorNotificacoes />
                 <TelaLogin />
-            </>
+            </div>
         )
     }
 

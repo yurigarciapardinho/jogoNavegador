@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
-
+import ContadorTempo from './ContadorTempo'
+import { obterCustoEdificio, obterPropriedadesUnidade } from '../constantes/constantesJogo'
 import { api } from '../api'
 
 export default function TelaAldeia() {
@@ -11,12 +12,6 @@ export default function TelaAldeia() {
     const [filaAtiva, definirFilaAtiva] = useState<any[]>([])
     const [filaUnidadesAtiva, definirFilaUnidadesAtiva] = useState<any[]>([])
     const [quantidadesRecrutamento, definirQuantidadesRecrutamento] = useState<Record<string, number>>({ spear: 0, sword: 0, axe: 0 })
-    const [agora, definirAgora] = useState(new Date())
-
-    useEffect(() => {
-        const intervalo = setInterval(() => definirAgora(new Date()), 1000)
-        return () => clearInterval(intervalo)
-    }, [])
 
     const buscarAldeia = async () => {
         try {
@@ -65,30 +60,7 @@ export default function TelaAldeia() {
         }
     }
 
-    const obterCusto = (tipoEdificio: string, nivel: number) => {
-        const bases: any = {
-            timberCamp: { wood: 50, clay: 60, iron: 40, timeSec: 15 },
-            clayPit:    { wood: 65, clay: 50, iron: 40, timeSec: 15 },
-            ironMine:   { wood: 75, clay: 65, iron: 70, timeSec: 18 }
-        }
-        const base = bases[tipoEdificio] || { wood: 50, clay: 50, iron: 50, timeSec: 10 }
-        const fator = Math.pow(1.2, nivel - 1)
-        return {
-            madeira: Math.floor(base.wood * fator),
-            argila: Math.floor(base.clay * fator),
-            ferro: Math.floor(base.iron * fator),
-            tempoSegundos: Math.floor(base.timeSec * fator)
-        }
-    }
 
-    const obterPropriedadesUnidade = (tipo: string) => {
-        const propriedades: any = {
-            spear: { nome: 'Lanceiro', madeira: 50, argila: 30, ferro: 10, tempoSegundos: 15 },
-            sword: { nome: 'Espadachim', madeira: 30, argila: 30, ferro: 70, tempoSegundos: 25 },
-            axe:   { nome: 'Bárbaro (Machado)', madeira: 60, argila: 30, ferro: 40, tempoSegundos: 20 }
-        }
-        return propriedades[tipo]
-    }
 
     const recrutarTropa = async (tipoUnidade: string) => {
         const quantidade = quantidadesRecrutamento[tipoUnidade]
@@ -123,12 +95,6 @@ export default function TelaAldeia() {
         const estaValido = quantidadeParaRecrutar > 0 && podePagar && !carregandoConstrucao
         
         const estaNafila = filaUnidadesAtiva.find(q => q.unitType === tipo)
-        let textoRestante = ''
-        if (estaNafila) {
-            const restante = Math.max(0, new Date(estaNafila.endTime).getTime() - agora.getTime())
-            if (restante === 0) textoRestante = 'Pronto! (Atualize a página)'
-            else textoRestante = `Faltam ${Math.ceil(restante / 1000)}s`
-        }
 
         return (
             <div className="cartaoItem animarSurgimento" key={tipo}>
@@ -139,7 +105,9 @@ export default function TelaAldeia() {
                     </div>
                     {estaNafila && (
                         <div style={{ textAlign: 'right' }}>
-                            <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold' }}>{textoRestante}</p>
+                            <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold' }}>
+                                <ContadorTempo endTime={estaNafila.endTime} />
+                            </p>
                             <p className="cartaoItem_detalhe">Treinando: {estaNafila.amount}</p>
                         </div>
                     )}
@@ -181,19 +149,12 @@ export default function TelaAldeia() {
     const renderizarLinhaEdificio = (tipo: string, nome: string, nivel: number, corDestaque: string) => {
         const estaNafila = filaAtiva.find(q => q.buildingType === tipo)
         const proximoNivel = estaNafila ? estaNafila.targetLevel : nivel + 1
-        const custo = obterCusto(tipo, proximoNivel)
+        const custo = obterCustoEdificio(tipo, proximoNivel)
         
-        let textoRestante = ''
         let desativado = carregandoConstrucao
         
         if (estaNafila) {
             desativado = true
-            const restante = Math.max(0, new Date(estaNafila.endTime).getTime() - agora.getTime())
-            if (restante === 0) {
-                textoRestante = 'Pronto! (Atualize a página)'
-            } else {
-                textoRestante = `Faltam ${Math.ceil(restante / 1000)}s`
-            }
         } else if (recursos.madeira < custo.madeira || recursos.argila < custo.argila || recursos.ferro < custo.ferro) {
             desativado = true
         }
@@ -211,7 +172,11 @@ export default function TelaAldeia() {
                         )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                        {estaNafila && <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '4px' }}>{textoRestante}</p>}
+                        {estaNafila && (
+                            <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                                <ContadorTempo endTime={estaNafila.endTime} />
+                            </p>
+                        )}
                         <button 
                             onClick={() => evoluirConstrucao(tipo)}
                             disabled={desativado}

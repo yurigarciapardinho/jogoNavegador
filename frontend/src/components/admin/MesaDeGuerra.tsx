@@ -226,7 +226,7 @@ const MesaDeGuerra: React.FC = () => {
                                 </td>
                                 <td style={{ padding: '12px', fontFamily: 'monospace' }}>({ald.x}|{ald.y})</td>
                                 <td style={{ padding: '12px', color: '#aaa' }}>
-                                    {ald.resources?.wood || 0} / {ald.resources?.clay || 0} / {ald.resources?.iron || 0}
+                                    {Math.floor(ald.resources?.wood || 0)} / {Math.floor(ald.resources?.clay || 0)} / {Math.floor(ald.resources?.iron || 0)}
                                 </td>
                                 <td style={{ padding: '12px', color: '#aaa' }}>
                                     {ald.units?.spear || 0} / {ald.units?.sword || 0} / {ald.units?.axe || 0}
@@ -235,7 +235,7 @@ const MesaDeGuerra: React.FC = () => {
                                     <button 
                                         onClick={() => definirModalEdicao({
                                             id: ald.id, name: ald.name,
-                                            wood: ald.resources?.wood || 0, clay: ald.resources?.clay || 0, iron: ald.resources?.iron || 0,
+                                            wood: Math.floor(ald.resources?.wood || 0), clay: Math.floor(ald.resources?.clay || 0), iron: Math.floor(ald.resources?.iron || 0),
                                             spear: ald.units?.spear || 0, sword: ald.units?.sword || 0, axe: ald.units?.axe || 0
                                         })}
                                         style={{ 

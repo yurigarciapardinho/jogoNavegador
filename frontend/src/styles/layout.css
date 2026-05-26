@@ -1,6 +1,6 @@
 /* --- Estrutura Principal --- */
 .aplicativoRaiz {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -50,14 +50,14 @@
 
 /* Tela de Login */
 .telaLogin {
-  min-height: 100vh;
+  flex: 1;
+  overflow-y: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: var(--espacamentoMedio);
 }
 
 .telaLogin_caixa {
+  margin: auto;
   background-color: var(--corPainel);
   padding: var(--espacamentoGrande);
   border-radius: var(--bordaArredondada);
@@ -156,6 +156,8 @@
 /* Telas Auxiliares (Aldeia/Relatórios) */
 .telaGeral {
   flex: 1;
+  height: 100%;
+  overflow-y: auto;
   padding: var(--espacamentoGrande);
 }
 
