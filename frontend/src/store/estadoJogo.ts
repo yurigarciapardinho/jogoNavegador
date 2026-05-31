@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../api'
 
 interface Recursos {
     madeira: number
@@ -36,11 +37,46 @@ interface EstadoJogo {
     realizarLogout: () => void
     isDefeated: boolean
     definirDerrota: (derrotado: boolean) => void
+    dadosAldeia: any | null
+    filaAtiva: any[]
+    filaUnidadesAtiva: any[]
+    sincronizarAldeiaSilenciosa: () => Promise<void>
 }
 
-export const usarEstadoJogo = create<EstadoJogo>((set) => ({
+export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
     recursos: { madeira: 0, argila: 0, ferro: 0 },
     definirRecursos: (recursos) => set({ recursos }),
+    dadosAldeia: null,
+    filaAtiva: [],
+    filaUnidadesAtiva: [],
+    sincronizarAldeiaSilenciosa: async () => {
+        const estado = get()
+        if (!estado.token) return
+        try {
+            const dadosMeResponse = await api.get('/me/villages', estado.token)
+            const { villages, globalMessage, isDefeated } = dadosMeResponse
+            
+            set({ mensagemGlobal: globalMessage || null, isDefeated: isDefeated || false })
+            
+            if (villages && villages.length > 0) {
+                const idAldeia = villages[0].id
+                const dados = await api.get(`/village/${idAldeia}`, estado.token)
+                
+                set({
+                    dadosAldeia: dados,
+                    recursos: {
+                        madeira: dados.resources.wood || 0,
+                        argila: dados.resources.clay || 0,
+                        ferro: dados.resources.iron || 0
+                    },
+                    filaAtiva: dados.activeQueue || [],
+                    filaUnidadesAtiva: dados.activeUnitQueue || []
+                })
+            }
+        } catch (erro) {
+            // Falha silenciosa para não quebrar a UX em caso de instabilidade de rede
+        }
+    },
     mensagemGlobal: null,
     definirMensagemGlobal: (msg) => set({ mensagemGlobal: msg }),
     telaAtual: (() => {
@@ -88,7 +124,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set) => ({
     },
     realizarLogout: () => {
         localStorage.removeItem('tw2_token')
-        set({ token: null, usuario: null })
+        set({ token: null, usuario: null, dadosAldeia: null, filaAtiva: [], filaUnidadesAtiva: [] })
     },
     isDefeated: false,
     definirDerrota: (derrotado) => set({ isDefeated: derrotado })

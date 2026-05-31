@@ -46,7 +46,7 @@ A alocação das aldeias ocorre no arquivo `spawn.ts`.
   - **Espadachim (Sword)**: Foco defensivo pesado, Ataque: 25, Defesa: 50, Carga: 15.
   - **Machado (Axe/Bárbaro)**: Foco ofensivo, Ataque: 40, Defesa: 10, Carga: 10.
 - **Velocidade de Treinamento**: Pode ser otimizada pelo Quartel com a equação de redução progressiva `0.95 ^ (NívelQuartel - 1)`.
-- **Combat Loop**: O arquivo `combatLoop.ts` roda eternamente num `setInterval` a cada 2 segundos. Ele puxa do banco todos os `Movement` pendentes que atingiram ou passaram o `arrivalTime` no relógio e julga as consequências.
+- **Combat Loop**: O motor de combate roda isoladamente em um processo independente (`worker.ts`) que invoca o loop (`combatLoop.ts`) num `setInterval` a cada 2 segundos. Ele puxa do banco todos os `Movement` pendentes que atingiram ou passaram o `arrivalTime` no relógio e julga as consequências.
 - **Cálculo da Batalha (`calculateCombat`)**:
   - Acumula total de Ataque Atacante e Total de Defesa (Defensor original + `SupportingTroops` se houver).
   - Vencedor = Maior Poder. O percentual de mortalidade de um grupo é calculado pela equação implacável: `(PoderAdversario / MeuPoder) ^ 1.5`, com máximo fixo de perda de 100%. O grupo vencedor ainda perde parte proporcional das tropas.

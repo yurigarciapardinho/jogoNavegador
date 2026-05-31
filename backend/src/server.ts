@@ -329,10 +329,6 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     return { message: 'Recrutamento enviado para a fila' }
 })
 
-import { startCombatLoop } from './gameLogic/combatLoop'
-
-// Inicia o motor de combate do jogo (varre o DB buscando ataques/retornos que chegaram ao destino)
-startCombatLoop(prisma)
 
 fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string }

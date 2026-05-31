@@ -6,46 +6,23 @@ import { obterCustoEdificio, obterPropriedadesUnidade } from '../constantes/cons
 import { api } from '../api'
 
 export default function TelaAldeia() {
-    const { recursos, definirRecursos, token, adicionarNotificacao } = usarEstadoJogo()
-    const [dadosAldeia, definirDadosAldeia] = useState<any>(null)
+    const { recursos, token, adicionarNotificacao, dadosAldeia, filaAtiva, filaUnidadesAtiva, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
     const [erroBusca, definirErroBusca] = useState('')
     const [carregandoConstrucao, definirCarregandoConstrucao] = useState(false)
-    const [filaAtiva, definirFilaAtiva] = useState<any[]>([])
-    const [filaUnidadesAtiva, definirFilaUnidadesAtiva] = useState<any[]>([])
     const [quantidadesRecrutamento, definirQuantidadesRecrutamento] = useState<Record<string, number>>({ spear: 0, sword: 0, axe: 0 })
 
     const buscarAldeia = async () => {
         try {
-            const dadosMeResponse = await api.get('/me/villages', token)
-            
-            // O backend agora retorna { villages, globalMessage, role, isDefeated }
-            const { villages, globalMessage, isDefeated } = dadosMeResponse
-            
-            usarEstadoJogo.getState().definirMensagemGlobal(globalMessage || null)
-            usarEstadoJogo.getState().definirDerrota(isDefeated || false)
-            
-            if (villages && villages.length > 0) {
-                const idAldeia = villages[0].id
-                const dados = await api.get(`/village/${idAldeia}`, token)
-                
-                definirDadosAldeia(dados)
-                definirRecursos({
-                    madeira: dados.resources.wood || 0,
-                    argila: dados.resources.clay || 0,
-                    ferro: dados.resources.iron || 0
-                })
-                definirFilaAtiva(dados.activeQueue || [])
-                definirFilaUnidadesAtiva(dados.activeUnitQueue || [])
-            } else {
-                definirErroBusca('Nenhuma aldeia encontrada para esta conta.')
-            }
+            await sincronizarAldeiaSilenciosa()
         } catch (erro: any) {
-            definirErroBusca(erro.message || 'Erro ao conectar com o backend.')
+            definirErroBusca('Erro ao conectar com o backend.')
         }
     }
 
     useEffect(() => {
-        buscarAldeia()
+        if (!dadosAldeia) {
+            buscarAldeia()
+        }
     }, [])
 
     const evoluirConstrucao = async (tipoEdificio: string) => {

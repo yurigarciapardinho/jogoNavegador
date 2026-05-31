@@ -175,6 +175,8 @@ model Movement {
   arrivalTime    DateTime
 
   completed      Boolean  @default(false)
+
+  @@index([arrivalTime, completed])
 }
 
 model CombatReport {

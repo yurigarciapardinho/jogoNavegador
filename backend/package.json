@@ -7,9 +7,11 @@
   "author": "Yuri Garcia Pardinho <@yurigarciapardinho>",
   "main": "src/server.ts",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch src/server.ts",
+    "dev:api": "NODE_ENV=development tsx watch src/server.ts",
+    "dev:worker": "NODE_ENV=development tsx watch src/worker.ts",
     "dev:lan": "HOST=0.0.0.0 NODE_ENV=development tsx watch src/server.ts",
-    "start": "HOST=0.0.0.0 NODE_ENV=production tsx src/server.ts",
+    "start:api": "HOST=0.0.0.0 NODE_ENV=production tsx src/server.ts",
+    "start:worker": "NODE_ENV=production tsx src/worker.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",

@@ -10,7 +10,18 @@ import VigiaDeBatalha from './components/VigiaDeBatalha'
 import TelaDerrota from './components/TelaDerrota'
 
 const App: React.FC = () => {
-    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated } = usarEstadoJogo()
+    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
+
+    React.useEffect(() => {
+        if (!token) return
+        
+        sincronizarAldeiaSilenciosa()
+        const intervalo = setInterval(() => {
+            sincronizarAldeiaSilenciosa()
+        }, 15000)
+        
+        return () => clearInterval(intervalo)
+    }, [token])
 
     if (token && isDefeated) {
         return <TelaDerrota />
