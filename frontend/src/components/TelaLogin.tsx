@@ -10,6 +10,7 @@ const TelaLogin: React.FC = () => {
     const [emailInformado, definirEmail] = useState('')
     const [nomeInformado, definirNome] = useState('')
     const [senhaInformada, definirSenha] = useState('')
+    const [regiao, definirRegiao] = useState('ALEATORIO')
     const [carregando, definirCarregando] = useState(false)
     
     const [erroEmail, definirErroEmail] = useState('')
@@ -52,7 +53,7 @@ const TelaLogin: React.FC = () => {
         const urlAPI = modoLogin ? '/auth/login' : '/auth/register'
         const corpoRequisicao = modoLogin 
             ? { username: nomeInformado, password: senhaInformada } 
-            : { email: emailInformado, username: nomeInformado, password: senhaInformada }
+            : { email: emailInformado, username: nomeInformado, password: senhaInformada, region: regiao }
 
         try {
             const dados = await api.post(urlAPI, corpoRequisicao)
@@ -90,17 +91,38 @@ const TelaLogin: React.FC = () => {
 
                 <form onSubmit={processarFormulario} className="telaLogin_formulario">
                     {!modoLogin && (
-                        <div className="campoGrupo">
-                            <label className="campoRotulo">E-mail</label>
-                            <input 
-                                id="inputEmail"
-                                type="email" 
-                                value={emailInformado}
-                                onChange={(e) => definirEmail(e.target.value)}
-                                className={`campoEntrada ${erroEmail ? 'campoEntrada--erro' : ''}`}
-                            />
-                            {erroEmail && <span className="mensagemErroValidacao">{erroEmail}</span>}
-                        </div>
+                        <>
+                            <div className="campoGrupo">
+                                <label className="campoRotulo">E-mail</label>
+                                <input 
+                                    id="inputEmail"
+                                    type="email" 
+                                    value={emailInformado}
+                                    onChange={(e) => definirEmail(e.target.value)}
+                                    className={`campoEntrada ${erroEmail ? 'campoEntrada--erro' : ''}`}
+                                />
+                                {erroEmail && <span className="mensagemErroValidacao">{erroEmail}</span>}
+                            </div>
+                            
+                            <div className="campoGrupo">
+                                <label className="campoRotulo">Região de Nascimento</label>
+                                <select 
+                                    value={regiao} 
+                                    onChange={(e) => definirRegiao(e.target.value)} 
+                                    className="campoEntrada"
+                                >
+                                    <option value="ALEATORIO">Aleatório (Padrão)</option>
+                                    <option value="NO">Noroeste (NO)</option>
+                                    <option value="N">Norte (N)</option>
+                                    <option value="NE">Nordeste (NE)</option>
+                                    <option value="O">Oeste (O)</option>
+                                    <option value="L">Leste (L)</option>
+                                    <option value="SO">Sudoeste (SO)</option>
+                                    <option value="S">Sul (S)</option>
+                                    <option value="SE">Sudeste (SE)</option>
+                                </select>
+                            </div>
+                        </>
                     )}
 
                     <div className="campoGrupo">

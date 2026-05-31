@@ -57,26 +57,58 @@ export const startCombatLoop = (prisma: any) => {
                 },
                 include: {
                     origin: { include: { resources: true } },
-                    target: { include: { resources: true, buildings: true, units: true } }
+                    target: { include: { resources: true, buildings: true, units: true, supportingReceived: true } }
                 }
             })
 
             for (const mov of arrivedMovements) {
                 if (mov.type === 'ATTACK') {
                     const targetUnits = mov.target.units || { spear: 0, sword: 0, axe: 0 }
+                    const supportTroops = mov.target.supportingReceived || []
+                    
+                    let defSpear = targetUnits.spear
+                    let defSword = targetUnits.sword
+                    let defAxe = targetUnits.axe
+
+                    for (const sup of supportTroops) {
+                        defSpear += sup.spear
+                        defSword += sup.sword
+                        defAxe += sup.axe
+                    }
+
                     const atkUnits = { spear: mov.spear, sword: mov.sword, axe: mov.axe }
+                    const defUnits = { spear: defSpear, sword: defSword, axe: defAxe }
                     
-                    const combatResult = calculateCombat(atkUnits, targetUnits)
+                    const combatResult = calculateCombat(atkUnits, defUnits)
                     
+                    const spearSurvival = defSpear > 0 ? combatResult.survivingDef.spear / defSpear : 0
+                    const swordSurvival = defSword > 0 ? combatResult.survivingDef.sword / defSword : 0
+                    const axeSurvival = defAxe > 0 ? combatResult.survivingDef.axe / defAxe : 0
+
                     if (mov.target.units) {
                         await prisma.villageUnit.update({
                             where: { villageId: mov.targetId },
                             data: {
-                                spear: combatResult.survivingDef.spear,
-                                sword: combatResult.survivingDef.sword,
-                                axe: combatResult.survivingDef.axe
+                                spear: Math.round(targetUnits.spear * spearSurvival),
+                                sword: Math.round(targetUnits.sword * swordSurvival),
+                                axe: Math.round(targetUnits.axe * axeSurvival)
                             }
                         })
+                    }
+
+                    for (const sup of supportTroops) {
+                        const newSpear = Math.round(sup.spear * spearSurvival)
+                        const newSword = Math.round(sup.sword * swordSurvival)
+                        const newAxe = Math.round(sup.axe * axeSurvival)
+                        
+                        if (newSpear + newSword + newAxe <= 0) {
+                            await prisma.supportingTroop.delete({ where: { id: sup.id } })
+                        } else {
+                            await prisma.supportingTroop.update({
+                                where: { id: sup.id },
+                                data: { spear: newSpear, sword: newSword, axe: newAxe }
+                            })
+                        }
                     }
                     
                     let lootedWood = 0, lootedClay = 0, lootedIron = 0
@@ -109,7 +141,6 @@ export const startCombatLoop = (prisma: any) => {
                             }
                         }
 
-                        // INOVAÇÃO TW3: Bárbara ganha níveis se for atacada 3 vezes (só se atacante venceu)
                         if (mov.target.userId === null) {
                             const newAttacks = mov.target.attacksReceived + 1
                             if (newAttacks >= 3) {
@@ -136,8 +167,7 @@ export const startCombatLoop = (prisma: any) => {
                             }
                         }
 
-                        // Só retorna as tropas se venceu e sobraram
-                        const returnTime = new Date(now.getTime() + (now.getTime() - mov.startTime.getTime())) // Tempo de volta = tempo de ida
+                        const returnTime = new Date(now.getTime() + (now.getTime() - mov.startTime.getTime())) 
                         await prisma.movement.create({
                             data: {
                                 type: 'RETURN',
@@ -154,12 +184,12 @@ export const startCombatLoop = (prisma: any) => {
                         })
                     }
 
-                    let reportDefSpear = targetUnits.spear
-                    let reportDefSword = targetUnits.sword
-                    let reportDefAxe = targetUnits.axe
-                    let reportDefLostSpear = targetUnits.spear - combatResult.survivingDef.spear
-                    let reportDefLostSword = targetUnits.sword - combatResult.survivingDef.sword
-                    let reportDefLostAxe = targetUnits.axe - combatResult.survivingDef.axe
+                    let reportDefSpear = defSpear
+                    let reportDefSword = defSword
+                    let reportDefAxe = defAxe
+                    let reportDefLostSpear = defSpear - combatResult.survivingDef.spear
+                    let reportDefLostSword = defSword - combatResult.survivingDef.sword
+                    let reportDefLostAxe = defAxe - combatResult.survivingDef.axe
 
                     if (!combatResult.attackerWon) {
                         reportDefSpear = -1
@@ -202,10 +232,42 @@ export const startCombatLoop = (prisma: any) => {
                     
                     console.log(`[COMBAT] Batalha concluída. Atacante venceu? ${combatResult.attackerWon}. Saque: ${lootedWood}`)
 
+                } else if (mov.type === 'SUPPORT') {
+                    const existingSupport = await prisma.supportingTroop.findFirst({
+                        where: { ownerId: mov.originId, targetId: mov.targetId }
+                    })
+
+                    if (existingSupport) {
+                        await prisma.supportingTroop.update({
+                            where: { id: existingSupport.id },
+                            data: {
+                                spear: existingSupport.spear + mov.spear,
+                                sword: existingSupport.sword + mov.sword,
+                                axe: existingSupport.axe + mov.axe
+                            }
+                        })
+                    } else {
+                        await prisma.supportingTroop.create({
+                            data: {
+                                ownerId: mov.originId,
+                                targetId: mov.targetId,
+                                spear: mov.spear,
+                                sword: mov.sword,
+                                axe: mov.axe
+                            }
+                        })
+                    }
+
+                    await prisma.movement.update({
+                        where: { id: mov.id },
+                        data: { completed: true }
+                    })
+
+                    console.log(`[COMBAT] Apoio de ${mov.originId} chegou em ${mov.targetId}.`)
+
                 } else if (mov.type === 'RETURN') {
-                    // Tropas chegaram de volta em casa
                     const originVillage = await prisma.village.findUnique({
-                        where: { id: mov.targetId }, // O target do RETURN é a aldeia de origem
+                        where: { id: mov.targetId }, 
                         include: { units: true, resources: true }
                     })
 
@@ -244,5 +306,5 @@ export const startCombatLoop = (prisma: any) => {
         } catch (e) {
             console.error('[COMBAT] Erro no combat loop', e)
         }
-    }, 2000) // Roda a cada 2 segundos
+    }, 2000)
 }

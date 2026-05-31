@@ -34,6 +34,8 @@ interface EstadoJogo {
     removerNotificacao: (id: string) => void
     realizarLogin: (token: string, usuario: EstadoUsuario) => void
     realizarLogout: () => void
+    isDefeated: boolean
+    definirDerrota: (derrotado: boolean) => void
 }
 
 export const usarEstadoJogo = create<EstadoJogo>((set) => ({
@@ -87,5 +89,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set) => ({
     realizarLogout: () => {
         localStorage.removeItem('tw2_token')
         set({ token: null, usuario: null })
-    }
+    },
+    isDefeated: false,
+    definirDerrota: (derrotado) => set({ isDefeated: derrotado })
 }))

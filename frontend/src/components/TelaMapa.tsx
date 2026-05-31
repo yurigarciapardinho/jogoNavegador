@@ -18,19 +18,47 @@ export default function TelaMapa() {
     const [unidadesOrigem, definirUnidadesOrigem] = useState({ lanceiro: 0, espadachim: 0, barbaro: 0 })
     const [idAldeiaOrigem, definirIdAldeiaOrigem] = useState<string | null>(null)
     
+    // UI Busca
+    const [buscaCoords, definirBuscaCoords] = useState({ x: '', y: '' })
+    const [buscaNome, definirBuscaNome] = useState('')
+
+    const focarMapa = (x: number, y: number) => {
+        if (refMotor.current) refMotor.current.focarNaCoordenada(x, y)
+    }
+
+    const buscarPorCoordenadas = () => {
+        const nx = parseInt(buscaCoords.x)
+        const ny = parseInt(buscaCoords.y)
+        if (!isNaN(nx) && !isNaN(ny)) focarMapa(nx, ny)
+    }
+
+    const buscarPorNome = async () => {
+        const termoBusca = buscaNome.trim()
+        if (!termoBusca) return
+        try {
+            const res = await api.get(`/map/search?q=${encodeURIComponent(termoBusca)}`, token)
+            if (res.x !== undefined && res.y !== undefined) {
+                focarMapa(res.x, res.y)
+            }
+        } catch (e: any) {
+            adicionarNotificacao(e.message || 'Aldeia não encontrada.', 'erro')
+        }
+    }
+    
     // Buscar tropas ativas do jogador para validar limite
     useEffect(() => {
         let estaMontado = true
         if (token && usuario) {
             api.get('/me/villages', token)
             .then(dados => {
-                if (estaMontado && dados.length > 0) {
-                    definirIdAldeiaOrigem(dados[0].id)
-                    if (dados[0].units) {
+                usarEstadoJogo.getState().definirDerrota(dados.isDefeated || false)
+                if (estaMontado && dados.villages && dados.villages.length > 0) {
+                    definirIdAldeiaOrigem(dados.villages[0].id)
+                    if (dados.villages[0].units) {
                         definirUnidadesOrigem({
-                            lanceiro: dados[0].units.spear || 0,
-                            espadachim: dados[0].units.sword || 0,
-                            barbaro: dados[0].units.axe || 0
+                            lanceiro: dados.villages[0].units.spear || 0,
+                            espadachim: dados.villages[0].units.sword || 0,
+                            barbaro: dados.villages[0].units.axe || 0
                         })
                     }
                 }
@@ -39,6 +67,21 @@ export default function TelaMapa() {
         }
         return () => { estaMontado = false }
     }, [token, usuario])
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === 'Space') {
+                const target = e.target as HTMLElement
+                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+                e.preventDefault()
+                if (refMotor.current) {
+                    refMotor.current.focarNaAldeiaAtiva()
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [])
 
     useEffect(() => {
         let foiCancelado = false;
@@ -55,7 +98,7 @@ export default function TelaMapa() {
             // Se o React desmontou o componente enquanto inicializar() rodava, destrói IMEDIATAMENTE após terminar.
             if (foiCancelado) {
                 motor.destruir();
-                refMotor.current = null;
+                if (refMotor.current === motor) refMotor.current = null;
             } else {
                 if (token && usuario) {
                     motor.carregarAldeias(token, usuario.id, (aldeia) => {
@@ -77,7 +120,7 @@ export default function TelaMapa() {
             // Se já terminou de inicializar, pode destruir agora.
             if (motor.estaInicializado) {
                 motor.destruir();
-                refMotor.current = null;
+                if (refMotor.current === motor) refMotor.current = null;
             }
             
             // Limpeza forçada do container para o Vite HMR
@@ -118,9 +161,26 @@ export default function TelaMapa() {
         <section className="telaMapa">
             <div ref={refContainer} className="telaMapa_containerPixi" onContextMenu={(e) => e.preventDefault()} />
             
+            <div className="mapaUI_busca">
+                <div style={{ fontSize: '0.875rem', fontWeight: 'bold' }}>Buscar por Coordenada</div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <input type="number" placeholder="X" value={buscaCoords.x} onChange={e => definirBuscaCoords({...buscaCoords, x: e.target.value})} />
+                    <input type="number" placeholder="Y" value={buscaCoords.y} onChange={e => definirBuscaCoords({...buscaCoords, y: e.target.value})} />
+                    <button onClick={buscarPorCoordenadas} className="botaoGeral botaoGeral--primario" style={{ padding: '4px' }}>Ir</button>
+                </div>
+                
+                <div style={{ fontSize: '0.875rem', fontWeight: 'bold', marginTop: '8px' }}>Buscar por Nome</div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <input type="text" placeholder="Nome" value={buscaNome} onChange={e => definirBuscaNome(e.target.value)} />
+                    <button onClick={buscarPorNome} className="botaoGeral botaoGeral--primario" style={{ padding: '4px' }}>Ir</button>
+                </div>
+            </div>
+
             <div className="telaMapa_dicaFlutuante">
                 <p>Pressione e arraste para mover o mapa. Clique em uma aldeia para interagir.</p>
             </div>
+
+            <div className="rosaDosVentos"></div>
 
             {aldeiaSelecionada && (
                 <div className="modalFundo animarSurgimento">
@@ -137,7 +197,7 @@ export default function TelaMapa() {
                             >
                                 Informação
                             </button>
-                            {aldeiaSelecionada.userId !== usuario?.id && (
+                            {aldeiaSelecionada.userId !== usuario?.id && usuario?.role !== 'ADMIN' && (
                                 <>
                                     <button 
                                         onClick={() => definirAbaAtiva('atacar')} 
@@ -169,22 +229,45 @@ export default function TelaMapa() {
                             <div style={{ marginTop: 'var(--espacamentoMedio)' }}>
                                 <p className="campoRotulo" style={{ marginBottom: 'var(--espacamentoMedio)' }}>Selecione as tropas que deseja enviar a partir da sua aldeia.</p>
                                 
-                                <div className="gradeTropas">
-                                    <div className="areaTropa">
-                                        <div className="campoRotulo">Lanceiro</div>
-                                        <input type="number" min="0" max={unidadesOrigem.lanceiro} value={qtdLanceiro} onChange={e => definirQtdLanceiro(Number(e.target.value))} className="campoEntrada" />
-                                        <div className="textoDestaque" onClick={() => definirQtdLanceiro(unidadesOrigem.lanceiro)}>(Máx: {unidadesOrigem.lanceiro})</div>
-                                    </div>
-                                    <div className="areaTropa">
-                                        <div className="campoRotulo">Espadachim</div>
-                                        <input type="number" min="0" max={unidadesOrigem.espadachim} value={qtdEspadachim} onChange={e => definirQtdEspadachim(Number(e.target.value))} className="campoEntrada" />
-                                        <div className="textoDestaque" onClick={() => definirQtdEspadachim(unidadesOrigem.espadachim)}>(Máx: {unidadesOrigem.espadachim})</div>
-                                    </div>
-                                    <div className="areaTropa">
-                                        <div className="campoRotulo">Bárbaro</div>
-                                        <input type="number" min="0" max={unidadesOrigem.barbaro} value={qtdBarbaro} onChange={e => definirQtdBarbaro(Number(e.target.value))} className="campoEntrada" />
-                                        <div className="textoDestaque" onClick={() => definirQtdBarbaro(unidadesOrigem.barbaro)}>(Máx: {unidadesOrigem.barbaro})</div>
-                                    </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {[
+                                        { id: 'lanceiro', nome: 'Lanceiro', max: unidadesOrigem.lanceiro, val: qtdLanceiro, setVal: definirQtdLanceiro },
+                                        { id: 'espadachim', nome: 'Espadachim', max: unidadesOrigem.espadachim, val: qtdEspadachim, setVal: definirQtdEspadachim },
+                                        { id: 'barbaro', nome: 'Bárbaro', max: unidadesOrigem.barbaro, val: qtdBarbaro, setVal: definirQtdBarbaro }
+                                    ].map(tropa => (
+                                        <div key={tropa.id} className="tropaLinha">
+                                            <div className="tropaCabecalho">
+                                                <div className="tropaNome">{tropa.nome}</div>
+                                                <div className="tropaInfo">
+                                                    <div>Casa: {tropa.max}</div>
+                                                    <div style={{ color: tropa.val > 0 ? 'var(--corSucesso)' : 'inherit' }}>Enviado: {tropa.val}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="tropaCorpo">
+                                                <input 
+                                                    type="range" 
+                                                    min="0" 
+                                                    max={tropa.max} 
+                                                    value={tropa.val} 
+                                                    onChange={e => tropa.setVal(Math.min(tropa.max, Math.max(0, Number(e.target.value))))} 
+                                                    className="tropaSliderControle" 
+                                                />
+                                                
+                                                <div className="tropaAcoes">
+                                                    <button className="tropaBotaoMax" onClick={() => tropa.setVal(tropa.max)}>MAX</button>
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max={tropa.max} 
+                                                        value={tropa.val} 
+                                                        onChange={e => tropa.setVal(Math.min(tropa.max, Math.max(0, Number(e.target.value))))} 
+                                                        className="tropaInputNumero" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 <button 

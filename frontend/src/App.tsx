@@ -7,9 +7,14 @@ import TelaRelatorios from './components/TelaRelatorios'
 import TelaAdministracao from './components/admin/TelaAdministracao'
 import GerenciadorNotificacoes from './components/GerenciadorNotificacoes'
 import VigiaDeBatalha from './components/VigiaDeBatalha'
+import TelaDerrota from './components/TelaDerrota'
 
 const App: React.FC = () => {
-    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal } = usarEstadoJogo()
+    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated } = usarEstadoJogo()
+
+    if (token && isDefeated) {
+        return <TelaDerrota />
+    }
 
     if (!token) {
         return (

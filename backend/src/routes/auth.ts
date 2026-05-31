@@ -1,12 +1,14 @@
 import { FastifyInstance } from 'fastify'
 import bcrypt from 'bcrypt'
 import { PrismaClient } from '@prisma/client'
+import { gerarCoordenadaSpawn } from '../utils/spawn'
 
 // Tipagem do body para evitar any
 interface RegisterBody {
     email?: string
     username?: string
     password?: string
+    region?: string
 }
 
 interface LoginBody {
@@ -49,24 +51,13 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
         const passwordHash = await bcrypt.hash(password, 10)
 
         try {
-            // Busca coordenadas ocupadas no mapa para sortear uma livre
-            const vilasOcupadas = await prisma.village.findMany({ select: { x: true, y: true } })
-            const ocupadasSet = new Set(vilasOcupadas.map(v => `${v.x},${v.y}`))
+            const coords = await gerarCoordenadaSpawn(prisma, body.region || 'ALEATORIO')
             
-            let x = 0, y = 0
-            let achouLivre = false
-            for (let tentativa = 0; tentativa < 100; tentativa++) {
-                x = Math.floor(Math.random() * 20)
-                y = Math.floor(Math.random() * 20)
-                if (!ocupadasSet.has(`${x},${y}`)) {
-                    achouLivre = true
-                    break
-                }
-            }
-
-            if (!achouLivre) {
+            if (!coords) {
                 return reply.code(507).send({ error: 'Servidor lotado. Não há espaço no mapa.' })
             }
+            
+            const { x, y } = coords;
 
             // Cria usuário e aldeia inicial em uma transação limpa
             const newUser = await prisma.$transaction(async (tx) => {
@@ -93,15 +84,18 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
                 return user
             })
 
-            // Spawn dinâmico de aldeias bárbaras nas proximidades (Assíncrono, fora da transação do usuário)
+            // Spawn dinâmico de UMA aldeia bárbara nas proximidades (Assíncrono, fora da transação do usuário)
             // Fire-and-forget para não falhar o cadastro se der erro de unique constraint
             setTimeout(async () => {
                 try {
-                    for (let i = 0; i < 2; i++) {
-                        const bx = Math.max(0, Math.min(19, x + Math.floor(Math.random() * 5) - 2))
-                        const by = Math.max(0, Math.min(19, y + Math.floor(Math.random() * 5) - 2))
+                    let created = false
+                    for (let tentativa = 0; tentativa < 5 && !created; tentativa++) {
+                        const bx = Math.max(0, Math.min(999, x + Math.floor(Math.random() * 5) - 2))
+                        const by = Math.max(0, Math.min(999, y + Math.floor(Math.random() * 5) - 2))
                         
-                        // Checa pra ver se tá livre no nanosegundo atual
+                        // Não pode ser a mesma coordenada do jogador
+                        if (bx === x && by === y) continue;
+
                         const exists = await prisma.village.findUnique({ where: { x_y: { x: bx, y: by } } })
                         if (!exists) {
                             await prisma.village.create({
@@ -115,6 +109,7 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
                                     units: { create: {} }
                                 }
                             })
+                            created = true
                         }
                     }
                 } catch (err) {

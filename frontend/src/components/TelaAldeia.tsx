@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 import ContadorTempo from './ContadorTempo'
+import PainelMovimentos from './PainelMovimentos'
 import { obterCustoEdificio, obterPropriedadesUnidade } from '../constantes/constantesJogo'
 import { api } from '../api'
 
@@ -17,10 +18,11 @@ export default function TelaAldeia() {
         try {
             const dadosMeResponse = await api.get('/me/villages', token)
             
-            // O backend agora retorna { villages, globalMessage, role }
-            const { villages, globalMessage } = dadosMeResponse
+            // O backend agora retorna { villages, globalMessage, role, isDefeated }
+            const { villages, globalMessage, isDefeated } = dadosMeResponse
             
             usarEstadoJogo.getState().definirMensagemGlobal(globalMessage || null)
+            usarEstadoJogo.getState().definirDerrota(isDefeated || false)
             
             if (villages && villages.length > 0) {
                 const idAldeia = villages[0].id
@@ -216,6 +218,8 @@ export default function TelaAldeia() {
             </header>
 
             <main className="gradePaineis">
+                <PainelMovimentos dadosAldeia={dadosAldeia} aoAtualizar={buscarAldeia} />
+
                 <section className="painelSecao">
                     <h2 className="telaGeral_titulo">Edifícios (Sede)</h2>
                     

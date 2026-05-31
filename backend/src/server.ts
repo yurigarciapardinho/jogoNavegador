@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import { gerarCoordenadaSpawn } from './utils/spawn'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
@@ -106,27 +107,118 @@ fastify.register(adminRoutes, { prisma })
 fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string, username: string, role?: string }
 
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+
     const villages = await prisma.village.findMany({
         where: { userId: user.id },
         include: { resources: true, buildings: true, units: true }
     })
+
+    if (villages.length === 0 && dbUser?.role !== 'ADMIN') {
+        if (!dbUser?.isDefeated) {
+            await prisma.user.update({ where: { id: user.id }, data: { isDefeated: true } })
+        }
+        const config = await prisma.serverConfig.findFirst()
+        return { villages: [], isDefeated: true, globalMessage: config?.globalMessage || null, role: dbUser?.role }
+    }
 
     const config = await prisma.serverConfig.findFirst()
 
     return { 
         villages, 
         globalMessage: config?.globalMessage || null,
-        role: user.role 
+        role: user.role,
+        isDefeated: dbUser?.isDefeated || false
     }
 })
 
+fastify.post('/me/restart', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string, username: string }
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+    
+    if (!dbUser?.isDefeated) {
+        return reply.code(400).send({ error: 'Você não está derrotado para recomeçar.' })
+    }
+
+    const { region } = (request.body as any) || {}
+    const coords = await gerarCoordenadaSpawn(prisma, region || 'ALEATORIO')
+
+    if (!coords) {
+        return reply.code(500).send({ error: 'Não foi possível encontrar lugar seguro para sua nova aldeia.' })
+    }
+    const { x, y } = coords
+
+    await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+            where: { id: user.id },
+            data: { isDefeated: false }
+        })
+
+        await tx.village.create({
+            data: {
+                name: `Nova Aldeia de ${user.username}`,
+                x,
+                y,
+                userId: user.id,
+                resources: { create: { wood: 500, clay: 500, iron: 500 } },
+                buildings: { create: {} },
+                units: { create: {} }
+            }
+        })
+    })
+
+    // Spawn 1 barbara
+    setTimeout(async () => {
+        let created = false
+        for (let tentativa = 0; tentativa < 5 && !created; tentativa++) {
+            const bx = Math.max(0, Math.min(999, x + Math.floor(Math.random() * 5) - 2))
+            const by = Math.max(0, Math.min(999, y + Math.floor(Math.random() * 5) - 2))
+            if (bx === x && by === y) continue;
+            const exists = await prisma.village.findUnique({ where: { x_y: { x: bx, y: by } } })
+            if (!exists) {
+                await prisma.village.create({
+                    data: {
+                        name: `Aldeia Bárbara`,
+                        x: bx,
+                        y: by,
+                        userId: null,
+                        resources: { create: { wood: 300, clay: 300, iron: 300 } },
+                        buildings: { create: { timberCamp: 1, clayPit: 1, ironMine: 1 } },
+                        units: { create: {} }
+                    }
+                })
+                created = true
+            }
+        }
+    }, 50)
+
+    return { message: 'Você renasceu com uma nova aldeia!' }
+})
+
 fastify.get('/map', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const { minX = 0, maxX = 999, minY = 0, maxY = 999 } = request.query as any
+
+    const numMinX = Number(minX)
+    const numMaxX = Number(maxX)
+    const numMinY = Number(minY)
+    const numMaxY = Number(maxY)
+
     const villages = await prisma.village.findMany({
+        where: {
+            x: { gte: numMinX, lte: numMaxX },
+            y: { gte: numMinY, lte: numMaxY }
+        },
         select: { id: true, name: true, x: true, y: true, userId: true }
     })
 
     const movements = await prisma.movement.findMany({
-        where: { completed: false },
+        where: { 
+            completed: false,
+            OR: [
+                { origin: { x: { gte: numMinX, lte: numMaxX }, y: { gte: numMinY, lte: numMaxY } } },
+                { target: { x: { gte: numMinX, lte: numMaxX }, y: { gte: numMinY, lte: numMaxY } } }
+            ]
+        },
         include: {
             origin: { select: { x: true, y: true } },
             target: { select: { x: true, y: true } }
@@ -134,6 +226,24 @@ fastify.get('/map', { preValidation: [fastify.authenticate] }, async (request, r
     })
 
     return { villages, movements }
+})
+
+fastify.get('/map/search', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    let { q } = request.query as any
+    if (!q || typeof q !== 'string') return reply.code(400).send({ error: 'Termo de busca vazio.' })
+    
+    q = q.trim()
+    if (!q) return reply.code(400).send({ error: 'Termo de busca vazio.' })
+    
+    // Busca por nome exato ou contendo
+    const village = await prisma.village.findFirst({
+        where: { name: { contains: q, mode: 'insensitive' } },
+        select: { x: true, y: true }
+    })
+
+    if (!village) return reply.code(404).send({ error: 'Aldeia não encontrada.' })
+    
+    return village
 })
 
 import { getUnitStats, getRecruitTime } from './gameLogic/unitEconomy'
@@ -156,33 +266,16 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     const stats = getUnitStats(unitType)
     if (!stats) return reply.code(400).send({ error: 'Unidade inválida.' })
 
-    const cost = {
-        wood: stats.cost.wood * amount,
-        clay: stats.cost.clay * amount,
-        iron: stats.cost.iron * amount
-    }
-
-    if (village.resources.wood < cost.wood || village.resources.clay < cost.clay || village.resources.iron < cost.iron) {
-        return reply.code(400).send({ error: 'Recursos insuficientes.' })
-    }
-
-    const lastQueue = await prisma.unitQueue.findFirst({
-        where: { villageId, completed: false },
-        orderBy: { endTime: 'desc' }
-    })
-
-    const startTime = lastQueue ? new Date(lastQueue.endTime) : new Date()
-    
-    const config = await prisma.serverConfig.findFirst()
-    const speedMultiplier = config?.speedMultiplier || 1.0
-    
-    let recruitTimeSec = getRecruitTime(unitType, amount, village.buildings.barracks)
-    recruitTimeSec = Math.max(1, Math.floor(recruitTimeSec / speedMultiplier)) // Não pode ser 0 segundos
-    
-    const endTime = new Date(startTime.getTime() + recruitTimeSec * 1000)
-
     try {
         await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Village" WHERE id = ${villageId} FOR UPDATE`
+
+            const cost = {
+                wood: stats.cost.wood * amount,
+                clay: stats.cost.clay * amount,
+                iron: stats.cost.iron * amount
+            }
+
             const resourceUpdate = await tx.villageResource.updateMany({
                 where: { 
                     villageId,
@@ -201,6 +294,21 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
                 throw new Error('INSUFFICIENT_RESOURCES')
             }
 
+            const lastQueue = await tx.unitQueue.findFirst({
+                where: { villageId, completed: false },
+                orderBy: { endTime: 'desc' }
+            })
+
+            const startTime = lastQueue ? new Date(lastQueue.endTime) : new Date()
+            
+            const config = await tx.serverConfig.findFirst()
+            const speedMultiplier = config?.speedMultiplier || 1.0
+            
+            let recruitTimeSec = getRecruitTime(unitType, amount, village.buildings!.barracks)
+            recruitTimeSec = Math.max(1, Math.floor(recruitTimeSec / speedMultiplier))
+            
+            const endTime = new Date(startTime.getTime() + recruitTimeSec * 1000)
+
             await tx.unitQueue.create({
                 data: {
                     villageId,
@@ -218,7 +326,7 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
         throw erro
     }
 
-    return { message: 'Recrutamento enviado para a fila', cost, endTime }
+    return { message: 'Recrutamento enviado para a fila' }
 })
 
 import { startCombatLoop } from './gameLogic/combatLoop'
@@ -228,55 +336,229 @@ startCombatLoop(prisma)
 
 fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string }
-    const { originId, targetId, spear = 0, sword = 0, axe = 0 } = request.body as any
+    const body = request.body as any
+    const { originId, targetId } = body
+
+    // Sanitização de entradas numéricas
+    const spear = Math.max(0, Math.floor(Number(body.spear) || 0))
+    const sword = Math.max(0, Math.floor(Number(body.sword) || 0))
+    const axe = Math.max(0, Math.floor(Number(body.axe) || 0))
+
+    if (spear + sword + axe <= 0) {
+        return reply.code(400).send({ error: 'Você deve enviar pelo menos uma tropa.' })
+    }
 
     const origin = await prisma.village.findFirst({
         where: { id: originId, userId: user.id },
-        include: { units: true }
+        select: { id: true, x: true, y: true }
     })
 
     const target = await prisma.village.findUnique({ where: { id: targetId } })
 
-    if (!origin || !origin.units || !target) return reply.code(400).send({ error: 'Aldeia de origem ou destino inválida.' })
+    if (!origin || !target) return reply.code(400).send({ error: 'Aldeia de origem ou destino inválida.' })
 
-    if (origin.units.spear < spear || origin.units.sword < sword || origin.units.axe < axe) {
-        return reply.code(400).send({ error: 'Você não tem essa quantidade de tropas.' })
+    // Deduz tropas de forma atômica prevenindo condições de corrida
+    try {
+        await prisma.$transaction(async (tx) => {
+            const updateResult = await tx.villageUnit.updateMany({
+                where: { 
+                    villageId: origin.id,
+                    spear: { gte: spear },
+                    sword: { gte: sword },
+                    axe: { gte: axe }
+                },
+                data: {
+                    spear: { decrement: spear },
+                    sword: { decrement: sword },
+                    axe: { decrement: axe }
+                }
+            })
+
+            if (updateResult.count === 0) {
+                throw new Error('INSUFFICIENT_TROOPS')
+            }
+
+            // Calcula a distância: √( (x2-x1)² + (y2-y1)² )
+            const dx = target.x - origin.x
+            const dy = target.y - origin.y
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            
+            // TEMPO_BASE = 30 segundos por bloco para o MVP
+            const config = await tx.serverConfig.findFirst()
+            const speedMultiplier = config?.speedMultiplier || 1.0
+
+            let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+            // Impede que o tempo seja menor que 1 segundo
+            const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
+
+            await tx.movement.create({
+                data: {
+                    type: 'ATTACK',
+                    originId,
+                    targetId,
+                    spear, sword, axe,
+                    arrivalTime
+                }
+            })
+        })
+    } catch (erro: any) {
+        if (erro.message === 'INSUFFICIENT_TROOPS') {
+            return reply.code(400).send({ error: 'Você não tem essa quantidade de tropas ou elas já foram despachadas.' })
+        }
+        throw erro
     }
 
-    // Deduz tropas
-    await prisma.villageUnit.update({
-        where: { villageId: origin.id },
-        data: {
-            spear: origin.units.spear - spear,
-            sword: origin.units.sword - sword,
-            axe: origin.units.axe - axe
-        }
+    return { message: 'Ataque enviado com sucesso!' }
+})
+
+fastify.post('/village/support', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string }
+    const body = request.body as any
+    const { originId, targetId } = body
+
+    const spear = Math.max(0, Math.floor(Number(body.spear) || 0))
+    const sword = Math.max(0, Math.floor(Number(body.sword) || 0))
+    const axe = Math.max(0, Math.floor(Number(body.axe) || 0))
+
+    if (spear + sword + axe <= 0) {
+        return reply.code(400).send({ error: 'Você deve enviar pelo menos uma tropa de apoio.' })
+    }
+
+    const origin = await prisma.village.findFirst({
+        where: { id: originId, userId: user.id },
+        select: { id: true, x: true, y: true }
     })
 
-    // Calcula a distância: √( (x2-x1)² + (y2-y1)² )
-    const dx = target.x - origin.x
-    const dy = target.y - origin.y
+    const target = await prisma.village.findUnique({ where: { id: targetId } })
+
+    if (!origin || !target) return reply.code(400).send({ error: 'Aldeia de origem ou destino inválida.' })
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const updateResult = await tx.villageUnit.updateMany({
+                where: { 
+                    villageId: origin.id,
+                    spear: { gte: spear },
+                    sword: { gte: sword },
+                    axe: { gte: axe }
+                },
+                data: {
+                    spear: { decrement: spear },
+                    sword: { decrement: sword },
+                    axe: { decrement: axe }
+                }
+            })
+
+            if (updateResult.count === 0) {
+                throw new Error('INSUFFICIENT_TROOPS')
+            }
+
+            const dx = target.x - origin.x
+            const dy = target.y - origin.y
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            
+            const config = await tx.serverConfig.findFirst()
+            const speedMultiplier = config?.speedMultiplier || 1.0
+
+            let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+            const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
+
+            await tx.movement.create({
+                data: {
+                    type: 'SUPPORT',
+                    originId,
+                    targetId,
+                    spear, sword, axe,
+                    arrivalTime
+                }
+            })
+        })
+    } catch (erro: any) {
+        if (erro.message === 'INSUFFICIENT_TROOPS') {
+            return reply.code(400).send({ error: 'Você não tem essa quantidade de tropas.' })
+        }
+        throw erro
+    }
+
+    return { message: 'Apoio enviado com sucesso!' }
+})
+
+fastify.post('/village/support/recall', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string }
+    const { supportId } = request.body as { supportId: string }
+
+    const support = await prisma.supportingTroop.findFirst({
+        where: { id: supportId, owner: { userId: user.id } },
+        include: { target: true, owner: true }
+    })
+
+    if (!support) return reply.code(404).send({ error: 'Apoio não encontrado ou não pertence a você.' })
+
+    const dx = support.target.x - support.owner.x
+    const dy = support.target.y - support.owner.y
     const distance = Math.sqrt(dx * dx + dy * dy)
     
-    // TEMPO_BASE = 30 segundos por bloco para o MVP
     const config = await prisma.serverConfig.findFirst()
     const speedMultiplier = config?.speedMultiplier || 1.0
-
     let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
-    // Impede que o tempo seja menor que 1 segundo
     const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
 
-    const mov = await prisma.movement.create({
-        data: {
-            type: 'ATTACK',
-            originId,
-            targetId,
-            spear, sword, axe,
-            arrivalTime
-        }
+    await prisma.$transaction(async (tx) => {
+        await tx.supportingTroop.delete({ where: { id: supportId } })
+        
+        await tx.movement.create({
+            data: {
+                type: 'RETURN',
+                originId: support.targetId,
+                targetId: support.ownerId,
+                spear: support.spear,
+                sword: support.sword,
+                axe: support.axe,
+                arrivalTime
+            }
+        })
     })
 
-    return mov
+    return { message: 'Tropas chamadas de volta.' }
+})
+
+fastify.post('/village/support/send-back', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string }
+    const { supportId } = request.body as { supportId: string }
+
+    const support = await prisma.supportingTroop.findFirst({
+        where: { id: supportId, target: { userId: user.id } },
+        include: { target: true, owner: true }
+    })
+
+    if (!support) return reply.code(404).send({ error: 'Apoio não encontrado na sua aldeia.' })
+
+    const dx = support.target.x - support.owner.x
+    const dy = support.target.y - support.owner.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    const config = await prisma.serverConfig.findFirst()
+    const speedMultiplier = config?.speedMultiplier || 1.0
+    let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+    const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
+
+    await prisma.$transaction(async (tx) => {
+        await tx.supportingTroop.delete({ where: { id: supportId } })
+        
+        await tx.movement.create({
+            data: {
+                type: 'RETURN',
+                originId: support.targetId,
+                targetId: support.ownerId,
+                spear: support.spear,
+                sword: support.sword,
+                axe: support.axe,
+                arrivalTime
+            }
+        })
+    })
+
+    return { message: 'Tropas devolvidas ao dono.' }
 })
 
 fastify.get('/reports', { preValidation: [fastify.authenticate] }, async (request, reply) => {
@@ -308,36 +590,26 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
         return reply.code(404).send({ error: 'Aldeia não encontrada ou não pertence a você.' })
     }
 
-    const currentLevel = (village.buildings as any)[buildingType] || 0
-    const newLevel = currentLevel + 1
-    const cost = getBuildingCost(buildingType, newLevel)
-
-    if (village.resources.wood < cost.wood || village.resources.clay < cost.clay || village.resources.iron < cost.iron) {
-        return reply.code(400).send({ error: 'Recursos insuficientes.' })
-    }
-
-    // Calcula tempo
-    const now = new Date()
-    let startTime = now
-    if (village.buildQueues && village.buildQueues.length > 0) {
-        // Enfileira após a última construção
-        startTime = new Date(village.buildQueues[0].endTime)
-    }
-
-    const config = await prisma.serverConfig.findFirst()
-    const speedMultiplier = config?.speedMultiplier || 1.0
-
-    let buildTimeSec = cost.timeSec
-    buildTimeSec = Math.max(1, Math.floor(buildTimeSec / speedMultiplier))
-
-    const endTime = new Date(startTime.getTime() + buildTimeSec * 1000)
-
-    // Subtrai recursos e adiciona na fila numa transaction protegida (Atomic Update)
     try {
         await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Village" WHERE id = ${villageId} FOR UPDATE`
+
+            const activeBuilds = await tx.buildingQueue.findMany({
+                where: { villageId, buildingType, completed: false }
+            })
+            
+            const currentBldgs = await tx.villageBuilding.findUnique({
+                where: { villageId }
+            })
+            
+            const currentLevel = currentBldgs ? (currentBldgs as any)[buildingType] || 0 : 0
+            const newLevel = currentLevel + activeBuilds.length + 1
+
+            const cost = getBuildingCost(buildingType, newLevel)
+
             const resourceUpdate = await tx.villageResource.updateMany({
                 where: { 
-                    villageId: village.id,
+                    villageId,
                     wood: { gte: cost.wood },
                     clay: { gte: cost.clay },
                     iron: { gte: cost.iron }
@@ -353,9 +625,24 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
                 throw new Error('INSUFFICIENT_RESOURCES')
             }
 
+            const lastBuild = await tx.buildingQueue.findFirst({
+                where: { villageId, completed: false },
+                orderBy: { endTime: 'desc' }
+            })
+
+            const startTime = lastBuild ? new Date(lastBuild.endTime) : new Date()
+
+            const config = await tx.serverConfig.findFirst()
+            const speedMultiplier = config?.speedMultiplier || 1.0
+
+            let buildTimeSec = cost.timeSec
+            buildTimeSec = Math.max(1, Math.floor(buildTimeSec / speedMultiplier))
+
+            const endTime = new Date(startTime.getTime() + buildTimeSec * 1000)
+
             await tx.buildingQueue.create({
                 data: {
-                    villageId: village.id,
+                    villageId,
                     buildingType,
                     targetLevel: newLevel,
                     startTime,
@@ -370,7 +657,7 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
         throw erro
     }
 
-    return { message: 'Construção enviada para a fila', cost, endTime }
+    return { message: 'Construção enviada para a fila' }
 })
 
 fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (request, reply) => {
@@ -382,7 +669,15 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
     try {
         const village = await prisma.village.findUnique({
             where: { id, userId: user.id },
-            include: { resources: true, buildings: true, units: true }
+            include: { 
+                resources: true, 
+                buildings: true, 
+                units: true,
+                movementsOrigin: { where: { completed: false }, include: { target: { select: { name: true, x: true, y: true } } } },
+                movementsTarget: { where: { completed: false }, include: { origin: { select: { name: true, x: true, y: true } } } },
+                supportingSent: { include: { target: { select: { name: true, x: true, y: true } } } },
+                supportingReceived: { include: { owner: { select: { name: true, x: true, y: true, user: { select: { username: true } } } } } }
+            }
         })
 
         if (!village) {

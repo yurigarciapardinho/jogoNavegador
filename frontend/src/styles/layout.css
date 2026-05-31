@@ -105,15 +105,139 @@
 }
 
 .telaMapa_dicaFlutuante {
-  position: absolute;
-  top: var(--espacamentoMedio);
-  left: var(--espacamentoMedio);
-  background-color: rgba(0, 0, 0, 0.5);
-  padding: var(--espacamentoPequeno);
-  border-radius: var(--bordaArredondada);
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
-  pointer-events: none;
+    position: absolute;
+    top: var(--espacamentoMedio);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: var(--espacamentoPequeno) var(--espacamentoMedio);
+    border-radius: var(--bordaArredondada);
+    color: rgba(255, 255, 255, 0.7);
+    pointer-events: none;
+    background-color: rgba(0, 0, 0, 0.5);
+    font-size: 0.875rem;
+    z-index: 10;
+}
+
+.mapaUI_busca {
+    position: absolute;
+    top: var(--espacamentoMedio);
+    left: var(--espacamentoMedio);
+    background-color: rgba(15, 23, 42, 0.9);
+    padding: var(--espacamentoPequeno);
+    border-radius: var(--bordaArredondada);
+    border: 1px solid var(--corBorda);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espacamentoPequeno);
+    backdrop-filter: blur(4px);
+    width: 200px;
+}
+
+.mapaUI_busca input {
+    background-color: var(--corFundoEscuro);
+    color: var(--corTextoPrincipal);
+    border: 1px solid var(--corBorda);
+    padding: 6px;
+    border-radius: 4px;
+    width: 100%;
+}
+
+.rosaDosVentos {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    width: 120px;
+    height: 120px;
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0.8;
+    background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="%23ca8a04" stroke-width="2" opacity="0.5"/><path d="M50 5 L60 40 L95 50 L60 60 L50 95 L40 60 L5 50 L40 40 Z" fill="%23b91c1c" opacity="0.8"/><path d="M50 5 L50 95 M5 50 L95 50" stroke="%23ca8a04" stroke-width="1"/><text x="50" y="15" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">N</text><text x="50" y="93" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">S</text><text x="90" y="54" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">L</text><text x="10" y="54" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">O</text></svg>') no-repeat center center;
+    background-size: contain;
+    filter: drop-shadow(0 0 10px rgba(0,0,0,0.8));
+}
+
+.tropaLinha {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background-color: rgba(15, 23, 42, 0.6);
+    padding: 16px;
+    border: 1px solid var(--corBorda);
+    border-radius: var(--bordaArredondada);
+    margin-bottom: var(--espacamentoPequeno);
+}
+
+.tropaCabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tropaInfo {
+    display: flex;
+    gap: 16px;
+    font-size: 0.85rem;
+    color: var(--corTextoSecundario);
+}
+
+.tropaNome {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--corTextoPrincipal);
+}
+
+.tropaCorpo {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.tropaSliderControle {
+    flex: 1;
+    min-width: 120px;
+    accent-color: var(--corPrimariaHover);
+    cursor: pointer;
+}
+
+.tropaAcoes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.tropaInputNumero {
+    width: 80px;
+    text-align: right;
+    font-weight: bold;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--corBorda);
+    color: #fff;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 1rem;
+    outline: none;
+}
+.tropaInputNumero:focus {
+    border-color: var(--corPrimariaHover);
+}
+
+.tropaBotaoMax {
+    background-color: transparent;
+    color: var(--corTextoSecundario);
+    border: 1px solid var(--corBorda);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.tropaBotaoMax:hover {
+    background-color: var(--corPrimariaHover);
+    color: #fff;
+    border-color: var(--corPrimariaHover);
 }
 
 /* Modal do Mapa */

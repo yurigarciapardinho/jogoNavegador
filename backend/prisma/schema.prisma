@@ -21,6 +21,8 @@ model User {
   passwordHash String    @default("")
   role         Role      @default(PLAYER)
 
+  isDefeated   Boolean   @default(false)
+
   villages     Village[]
 
   createdAt    DateTime  @default(now())
@@ -57,6 +59,10 @@ model Village {
   movementsOrigin Movement[] @relation("MovementOrigin")
   movementsTarget Movement[] @relation("MovementTarget")
 
+  // Tropas de apoio enviadas e recebidas
+  supportingSent     SupportingTroop[] @relation("OwnerVillage")
+  supportingReceived SupportingTroop[] @relation("StationedVillage")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -88,6 +94,7 @@ model VillageBuilding {
   warehouse      Int      @default(1)
   barracks       Int      @default(0)
   wall           Int      @default(0)
+  church         Int      @default(0)
 }
 
 model VillageUnit {
@@ -98,6 +105,22 @@ model VillageUnit {
   spear          Int      @default(0)
   sword          Int      @default(0)
   axe            Int      @default(0)
+}
+
+model SupportingTroop {
+  id             String   @id @default(uuid())
+  ownerId        String
+  owner          Village  @relation("OwnerVillage", fields: [ownerId], references: [id])
+  
+  targetId       String
+  target         Village  @relation("StationedVillage", fields: [targetId], references: [id])
+
+  spear          Int      @default(0)
+  sword          Int      @default(0)
+  axe            Int      @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model BuildingQueue {
