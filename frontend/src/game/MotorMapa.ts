@@ -340,14 +340,15 @@ export class MotorMapa {
                         corAldeia = 0xdc2626
                     }
 
+                    const containerAldeia = new Container()
+                    containerAldeia.x = aldeia.x * this.tamanhoBloco + (this.tamanhoBloco / 2)
+                    containerAldeia.y = aldeia.y * this.tamanhoBloco + (this.tamanhoBloco / 2)
+
                     const circulo = new Graphics()
                         .circle(0, 0, this.tamanhoBloco * 0.35)
                         .fill(corAldeia)
                         .stroke({ width: 2, color: 0xffffff })
 
-                    circulo.x = aldeia.x * this.tamanhoBloco + (this.tamanhoBloco / 2)
-                    circulo.y = aldeia.y * this.tamanhoBloco + (this.tamanhoBloco / 2)
-                    
                     circulo.eventMode = 'static'
                     circulo.cursor = 'pointer'
                     circulo.on('pointerdown', (evento) => {
@@ -355,8 +356,23 @@ export class MotorMapa {
                         if (this.aoClicarNaAldeiaCb) this.aoClicarNaAldeiaCb(aldeia)
                     })
 
-                    this.renderizados.set(aldeia.id, circulo)
-                    this.containerAldeias.addChild(circulo)
+                    const textoNome = new Text({
+                        text: aldeia.name,
+                        style: {
+                            fontSize: 10,
+                            fill: 0xffffff,
+                            align: 'center',
+                            dropShadow: { color: 0x000000, alpha: 0.8, distance: 1, blur: 2 }
+                        }
+                    })
+                    textoNome.anchor.set(0.5, 0)
+                    textoNome.y = (this.tamanhoBloco * 0.35) + 2 // Posicionado logo abaixo do círculo
+
+                    containerAldeia.addChild(circulo)
+                    containerAldeia.addChild(textoNome)
+
+                    this.renderizados.set(aldeia.id, containerAldeia as any) // Mantém a compatibilidade de tipo do Map
+                    this.containerAldeias.addChild(containerAldeia)
                 }
             })
         } catch (erro) {

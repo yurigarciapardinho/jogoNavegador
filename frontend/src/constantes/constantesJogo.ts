@@ -17,11 +17,15 @@ export const obterCustoEdificio = (tipoEdificio: string, nivel: number) => {
 }
 
 export const PROPRIEDADES_UNIDADES: any = {
-    spear: { nome: 'Lanceiro', madeira: 50, argila: 30, ferro: 10, tempoSegundos: 15 },
-    sword: { nome: 'Espadachim', madeira: 30, argila: 30, ferro: 70, tempoSegundos: 25 },
-    axe:   { nome: 'Bárbaro (Machado)', madeira: 60, argila: 30, ferro: 40, tempoSegundos: 20 }
+    spear: { nome: 'Lanceiro', madeira: 50, argila: 30, ferro: 10, tempoSegundos: 15, speedSecPerBlock: 1080 },
+    sword: { nome: 'Espadachim', madeira: 30, argila: 30, ferro: 70, tempoSegundos: 25, speedSecPerBlock: 1320 },
+    axe:   { nome: 'Bárbaro (Machado)', madeira: 60, argila: 30, ferro: 40, tempoSegundos: 20, speedSecPerBlock: 1080 }
 }
 
 export const obterPropriedadesUnidade = (tipo: string) => {
     return PROPRIEDADES_UNIDADES[tipo]
+}
+
+export const obterProducaoRecurso = (nivel: number, speedMultiplier: number = 1.0) => {
+    return Math.floor(300 * Math.pow(1.15, nivel)) * speedMultiplier
 }

@@ -20,3 +20,21 @@ export const getBuildingCost = (buildingType: string, level: number) => {
         timeSec: Math.floor(base.timeSec * factor)
     }
 }
+
+/**
+ * Calcula os pontos totais de uma aldeia baseado nos níveis dos seus edifícios.
+ */
+export const calculatePoints = (buildings: any): number => {
+    if (!buildings) return 0
+    let points = 0
+    points += (buildings.headquarters || 0) * 10
+    points += (buildings.barracks || 0) * 16
+    points += (buildings.timberCamp || 0) * 6
+    points += (buildings.clayPit || 0) * 6
+    points += (buildings.ironMine || 0) * 6
+    points += (buildings.farm || 0) * 5
+    points += (buildings.warehouse || 0) * 6
+    points += (buildings.wall || 0) * 8
+    points += (buildings.church || 0) * 50
+    return points
+}

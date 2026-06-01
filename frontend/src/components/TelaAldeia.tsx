@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 import ContadorTempo from './ContadorTempo'
 import PainelMovimentos from './PainelMovimentos'
-import { obterCustoEdificio, obterPropriedadesUnidade } from '../constantes/constantesJogo'
+import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso } from '../constantes/constantesJogo'
 import { api } from '../api'
 
 export default function TelaAldeia() {
-    const { recursos, token, adicionarNotificacao, dadosAldeia, filaAtiva, filaUnidadesAtiva, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
+    const { recursos, token, adicionarNotificacao, dadosAldeia, filaAtiva, filaUnidadesAtiva, activeMultipliers, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
     const [erroBusca, definirErroBusca] = useState('')
     const [carregandoConstrucao, definirCarregandoConstrucao] = useState(false)
     const [quantidadesRecrutamento, definirQuantidadesRecrutamento] = useState<Record<string, number>>({ spear: 0, sword: 0, axe: 0 })
@@ -31,7 +31,7 @@ export default function TelaAldeia() {
         try {
             await api.post('/village/build', { villageId: dadosAldeia.id, buildingType: tipoEdificio }, token)
             adicionarNotificacao('Construção iniciada com sucesso!', 'sucesso')
-            await buscarAldeia()
+            await sincronizarAldeiaSilenciosa()
         } catch (erro: any) {
             adicionarNotificacao(erro.message || 'Erro ao enviar ordem de construção.', 'erro')
         } finally {
@@ -49,7 +49,7 @@ export default function TelaAldeia() {
             await api.post('/village/recruit', { villageId: dadosAldeia.id, unitType: tipoUnidade, amount: quantidade }, token)
             adicionarNotificacao(`Treinamento de ${quantidade} tropas iniciado!`, 'sucesso')
             definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipoUnidade]: 0 })
-            await buscarAldeia()
+            await sincronizarAldeiaSilenciosa()
         } catch (erro: any) {
             adicionarNotificacao(erro.message || 'Erro ao enviar ordem de recrutamento.', 'erro')
         } finally {
@@ -126,8 +126,14 @@ export default function TelaAldeia() {
     }
 
     const renderizarLinhaEdificio = (tipo: string, nome: string, nivel: number, corDestaque: string) => {
-        const estaNafila = filaAtiva.find(q => q.buildingType === tipo)
-        const proximoNivel = estaNafila ? estaNafila.targetLevel : nivel + 1
+        const filaAtivaItens = filaAtiva.filter(q => q.buildingType === tipo)
+        const estaNafila = filaAtivaItens.length > 0
+        const itemNaFila = estaNafila ? filaAtivaItens[0] : null
+        
+        // Pega o índice real desse edifício na fila global para saber se é o primeiro a ser construído
+        const indexGlobalNaFila = itemNaFila ? filaAtiva.findIndex(q => q.id === itemNaFila.id) : -1
+
+        const proximoNivel = estaNafila ? itemNaFila.targetLevel : nivel + 1
         const custo = obterCustoEdificio(tipo, proximoNivel)
         
         let desativado = carregandoConstrucao
@@ -138,12 +144,30 @@ export default function TelaAldeia() {
             desativado = true
         }
 
+        let resourceKey: 'wood' | 'clay' | 'iron' = 'wood';
+        if (tipo === 'clayPit') resourceKey = 'clay';
+        if (tipo === 'ironMine') resourceKey = 'iron';
+
+        const buildingMult = activeMultipliers[resourceKey] || 1.0;
+        const isEventActive = buildingMult > 1.0;
+        
+        const prodAtual = obterProducaoRecurso(nivel, buildingMult)
+        const prodProx = obterProducaoRecurso(proximoNivel, buildingMult)
+        const uiColor = isEventActive ? '#eab308' : corDestaque;
+
         return (
             <div className="cartaoItem animarSurgimento">
                 <div className="cartaoItem_cabecalho" style={{ marginBottom: 0 }}>
                     <div>
-                        <p style={{ fontWeight: 'bold', color: corDestaque }}>{nome}</p>
-                        <p className="cartaoItem_detalhe">Nível {nivel}</p>
+                        <p style={{ fontWeight: 'bold', color: corDestaque, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {nome} <span style={{ fontSize: '0.8rem', color: 'var(--corTextoSecundario)' }}>Nível {nivel}</span>
+                        </p>
+                        
+                        <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                            Rendimento: <span style={{ color: uiColor, fontWeight: isEventActive ? 'bold' : 'normal' }}>{prodAtual}/h</span> 
+                            {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)' }}>{prodProx}/h</span></span>}
+                        </p>
+
                         {!estaNafila && (
                             <p className="cartaoItem_detalhe" style={{ marginTop: '4px' }}>
                                 Custo: {custo.madeira} <span style={{ color: '#d97706' }}>Mad</span> | {custo.argila} <span style={{ color: '#ea580c' }}>Arg</span> | {custo.ferro} <span style={{ color: '#94a3b8' }}>Fer</span>
@@ -151,17 +175,12 @@ export default function TelaAldeia() {
                         )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                        {estaNafila && (
-                            <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '4px' }}>
-                                <ContadorTempo endTime={estaNafila.endTime} />
-                            </p>
-                        )}
                         <button 
                             onClick={() => evoluirConstrucao(tipo)}
                             disabled={desativado}
                             className={`botaoGeral ${!desativado && !estaNafila ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
                         >
-                            {estaNafila ? 'Em fila...' : `Evoluir (${custo.tempoSegundos}s)`}
+                            {estaNafila ? (indexGlobalNaFila === 0 ? 'Construindo...' : 'Na Fila') : `Evoluir (${custo.tempoSegundos}s)`}
                         </button>
                     </div>
                 </div>
@@ -200,6 +219,25 @@ export default function TelaAldeia() {
                 <section className="painelSecao">
                     <h2 className="telaGeral_titulo">Edifícios (Sede)</h2>
                     
+                    {filaAtiva.length > 0 && (
+                        <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', borderLeft: '4px solid var(--corPrimaria)' }}>
+                            <h3 style={{ fontSize: '1rem', marginBottom: '8px', color: 'var(--corPrimariaHover)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                🛠️ Fila de Construções
+                            </h3>
+                            {filaAtiva.map((item, i) => (
+                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < filaAtiva.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                                    <span style={{ fontSize: '0.9rem', color: i === 0 ? '#fff' : 'var(--corTextoSecundario)' }}>
+                                        <span style={{ display: 'inline-block', width: '20px', textAlign: 'center', background: i === 0 ? 'var(--corPrimaria)' : 'transparent', color: i === 0 ? '#000' : 'inherit', borderRadius: '4px', marginRight: '8px' }}>{i + 1}</span>
+                                        {item.buildingType === 'timberCamp' ? 'Bosque' : item.buildingType === 'clayPit' ? 'Poço de Argila' : 'Mina de Ferro'} Nível {item.targetLevel}
+                                    </span>
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: i === 0 ? 'var(--corSucesso)' : 'var(--corTextoSecundario)' }}>
+                                        {i === 0 ? <ContadorTempo endTime={item.endTime} /> : 'Aguardando...'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {dadosAldeia?.buildings ? (
                         <div>
                             {renderizarLinhaEdificio('timberCamp', 'Bosque (Madeira)', dadosAldeia.buildings.timberCamp, '#d97706')}
@@ -219,10 +257,6 @@ export default function TelaAldeia() {
                             {renderizarLinhaUnidade('spear')}
                             {renderizarLinhaUnidade('sword')}
                             {renderizarLinhaUnidade('axe')}
-
-                            <div style={{ marginTop: 'var(--espacamentoMedio)', padding: 'var(--espacamentoMedio)', backgroundColor: 'var(--corFundoEscuro)', borderRadius: 'var(--bordaArredondada)', fontSize: '0.875rem', color: 'var(--corTextoSecundario)' }}>
-                                Para atacar, vá no Mapa, clique na aldeia inimiga e copie o ID dela. (MVP Command)
-                            </div>
                         </div>
                     ) : (
                         <p className="telaGeral_texto">Carregando tropas...</p>

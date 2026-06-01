@@ -302,3 +302,95 @@
 .campoEntrada--erro:focus {
   border-color: var(--corPerigoHover);
 }
+
+/* 
+ * ============================================================================
+ * ALERTA GLOBAL DE ATAQUE
+ * ============================================================================
+ */
+.alertaAtaqueGlobal {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #dc2626; /* Vermelho vivo */
+    color: #ffffff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 9999;
+    cursor: default;
+    border: 2px solid #f87171;
+    transition: background-color 0.2s;
+}
+
+.alertaAtaqueGlobal--arrastando {
+    user-select: none;
+    opacity: 0.9;
+    /* transition: none; to ensure dragging has no delay */
+}
+
+.alertaAtaqueGlobal:hover {
+    background-color: #b91c1c;
+}
+
+.alertaAtaqueGlobal_icone {
+    font-size: 1.5rem;
+    cursor: grab;
+}
+.alertaAtaqueGlobal--arrastando .alertaAtaqueGlobal_icone {
+    cursor: grabbing;
+}
+
+.alertaAtaqueGlobal_texto {
+    display: flex;
+    flex-direction: column;
+}
+
+.alertaAtaqueGlobal_texto strong {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.alertaAtaqueGlobal_texto span {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.alertaAtaqueGlobal_fechar {
+    background: rgba(0, 0, 0, 0.2);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    transition: background 0.2s;
+}
+
+.alertaAtaqueGlobal_fechar:hover {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.pulse-anim {
+    animation: pulseAtaque 2s infinite;
+}
+
+@keyframes pulseAtaque {
+    0% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 15px rgba(220, 38, 38, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+    }
+}

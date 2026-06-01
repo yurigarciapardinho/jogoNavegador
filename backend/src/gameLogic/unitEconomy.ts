@@ -6,7 +6,8 @@ export const UNIT_STATS: Record<string, any> = {
         defense: 15,
         cost: { wood: 50, clay: 30, iron: 10 },
         baseTimeSec: 15,
-        capacity: 25
+        capacity: 25,
+        speedSecPerBlock: 1080 // 18 min
     },
     sword: {
         name: 'Espadachim',
@@ -15,7 +16,8 @@ export const UNIT_STATS: Record<string, any> = {
         defense: 50,
         cost: { wood: 30, clay: 30, iron: 70 },
         baseTimeSec: 25,
-        capacity: 15
+        capacity: 15,
+        speedSecPerBlock: 1320 // 22 min
     },
     axe: {
         name: 'Bárbaro (Machado)',
@@ -24,7 +26,8 @@ export const UNIT_STATS: Record<string, any> = {
         defense: 10,
         cost: { wood: 60, clay: 30, iron: 40 },
         baseTimeSec: 20,
-        capacity: 10
+        capacity: 10,
+        speedSecPerBlock: 1080 // 18 min
     }
 }
 

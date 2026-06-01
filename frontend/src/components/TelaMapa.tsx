@@ -6,7 +6,7 @@ import { usarEstadoJogo } from '../store/estadoJogo'
 export default function TelaMapa() {
     const refContainer = useRef<HTMLDivElement>(null)
     const refMotor = useRef<MotorMapa | null>(null)
-    const { token, usuario, adicionarNotificacao } = usarEstadoJogo()
+    const { token, usuario, adicionarNotificacao, dadosAldeia, serverSpeed } = usarEstadoJogo()
     
     const [aldeiaSelecionada, definirAldeiaSelecionada] = useState<any | null>(null)
     const [abaAtiva, definirAbaAtiva] = useState<'info' | 'atacar' | 'apoiar'>('info')
@@ -157,6 +157,48 @@ export default function TelaMapa() {
         }
     }
 
+    const formatarSegundos = (ms: number) => {
+        const totalSegundos = Math.floor(ms / 1000)
+        const horas = Math.floor(totalSegundos / 3600)
+        const minutos = Math.floor((totalSegundos % 3600) / 60)
+        const segs = totalSegundos % 60
+        return `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segs.toString().padStart(2, '0')}`
+    }
+
+    const calcularTempoMarchaInfo = () => {
+        if (!dadosAldeia || !aldeiaSelecionada) return '--:--:--'
+        const dx = aldeiaSelecionada.x - dadosAldeia.x
+        const dy = aldeiaSelecionada.y - dadosAldeia.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        let ms = Math.round((distance * 1080 * 1000) / serverSpeed) // Base de 18 min
+        if (aldeiaSelecionada.userId === null) {
+            ms = Math.round(ms / 5)
+        }
+        return formatarSegundos(ms)
+    }
+
+    const calcularTempoMarchaDinamico = () => {
+        if (!dadosAldeia || !aldeiaSelecionada) return '--:--:--'
+        const dx = aldeiaSelecionada.x - dadosAldeia.x
+        const dy = aldeiaSelecionada.y - dadosAldeia.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+
+        let maxSpeed = 0
+        if (qtdLanceiro > 0) maxSpeed = Math.max(maxSpeed, 1080)
+        if (qtdEspadachim > 0) maxSpeed = Math.max(maxSpeed, 1320)
+        if (qtdBarbaro > 0) maxSpeed = Math.max(maxSpeed, 1080)
+        
+        if (maxSpeed === 0) return '--:--:--'
+        
+        let ms = Math.round((distance * maxSpeed * 1000) / serverSpeed)
+        
+        if (aldeiaSelecionada.userId === null) {
+            ms = Math.round(ms / 5)
+        }
+
+        return formatarSegundos(ms)
+    }
+
     return (
         <section className="telaMapa">
             <div ref={refContainer} className="telaMapa_containerPixi" onContextMenu={(e) => e.preventDefault()} />
@@ -217,17 +259,25 @@ export default function TelaMapa() {
 
                         {abaAtiva === 'info' && (
                             <div className="campoGrupo" style={{ marginTop: 'var(--espacamentoMedio)' }}>
+                                <p className="campoRotulo">Jogador: <span style={{ color: 'var(--corTextoPrincipal)', fontWeight: 'bold' }}>{aldeiaSelecionada.username || (aldeiaSelecionada.userId ? 'Desconhecido' : 'Aldeia Bárbara (NPC)')}</span></p>
+                                <p className="campoRotulo">Pontuação: <span style={{ color: 'var(--corTextoPrincipal)' }}>{aldeiaSelecionada.points?.toLocaleString() || 0} pts</span></p>
                                 <p className="campoRotulo">Coordenadas: <span style={{ color: 'var(--corTextoPrincipal)' }}>{aldeiaSelecionada.x} | {aldeiaSelecionada.y}</span></p>
-                                <p className="campoRotulo">Jogador: <span style={{ color: 'var(--corTextoPrincipal)' }}>{aldeiaSelecionada.userId ? 'Sim' : 'Aldeia Bárbara (NPC)'}</span></p>
+                                <p className="campoRotulo">Tempo Base: <span style={{ color: 'var(--corTextoSecundario)' }}>~ {calcularTempoMarchaInfo()}</span></p>
+                                
                                 {aldeiaSelecionada.userId === null && (
-                                    <p className="textoDestaque" style={{ cursor: 'default' }}>Dica: Aldeias Bárbaras são alvos fáceis para farmar recursos no início do jogo!</p>
+                                    <p className="textoDestaque" style={{ cursor: 'default', marginTop: '8px' }}>Dica: Aldeias Bárbaras são alvos fáceis para farmar recursos no início do jogo!</p>
                                 )}
                             </div>
                         )}
 
                         {(abaAtiva === 'atacar' || abaAtiva === 'apoiar') && (
                             <div style={{ marginTop: 'var(--espacamentoMedio)' }}>
-                                <p className="campoRotulo" style={{ marginBottom: 'var(--espacamentoMedio)' }}>Selecione as tropas que deseja enviar a partir da sua aldeia.</p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--espacamentoMedio)' }}>
+                                    <p className="campoRotulo" style={{ margin: 0 }}>Selecione as tropas:</p>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--corAviso)', fontWeight: 'bold' }}>
+                                        ⏱ {calcularTempoMarchaDinamico()}
+                                    </span>
+                                </div>
                                 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {[

@@ -119,7 +119,7 @@ fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (re
             await prisma.user.update({ where: { id: user.id }, data: { isDefeated: true } })
         }
         const config = await prisma.serverConfig.findFirst()
-        return { villages: [], isDefeated: true, globalMessage: config?.globalMessage || null, role: dbUser?.role }
+        return { villages: [], isDefeated: true, globalMessage: config?.globalMessage || null, role: dbUser?.role, serverSpeed: config?.speedMultiplier || 1.0 }
     }
 
     const config = await prisma.serverConfig.findFirst()
@@ -128,7 +128,8 @@ fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (re
         villages, 
         globalMessage: config?.globalMessage || null,
         role: user.role,
-        isDefeated: dbUser?.isDefeated || false
+        isDefeated: dbUser?.isDefeated || false,
+        serverSpeed: config?.speedMultiplier || 1.0
     }
 })
 
@@ -203,20 +204,42 @@ fastify.get('/map', { preValidation: [fastify.authenticate] }, async (request, r
     const numMinY = Number(minY)
     const numMaxY = Number(maxY)
 
-    const villages = await prisma.village.findMany({
+    const { calculatePoints } = require('./gameLogic/economy')
+
+    const rawVillages = await prisma.village.findMany({
         where: {
             x: { gte: numMinX, lte: numMaxX },
             y: { gte: numMinY, lte: numMaxY }
         },
-        select: { id: true, name: true, x: true, y: true, userId: true }
+        select: { 
+            id: true, 
+            name: true, 
+            x: true, 
+            y: true, 
+            userId: true,
+            user: { select: { username: true } },
+            buildings: true
+        }
     })
+
+    const villages = rawVillages.map((v: any) => ({
+        id: v.id,
+        name: v.name,
+        x: v.x,
+        y: v.y,
+        userId: v.userId,
+        username: v.user?.username || null,
+        points: calculatePoints(v.buildings)
+    }))
+
+    const user = request.user as { id: string }
 
     const movements = await prisma.movement.findMany({
         where: { 
             completed: false,
             OR: [
-                { origin: { x: { gte: numMinX, lte: numMaxX }, y: { gte: numMinY, lte: numMaxY } } },
-                { target: { x: { gte: numMinX, lte: numMaxX }, y: { gte: numMinY, lte: numMaxY } } }
+                { origin: { userId: user.id }, type: { not: 'RETURN' } },
+                { target: { userId: user.id } }
             ]
         },
         include: {
@@ -379,11 +402,27 @@ fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async
             const dy = target.y - origin.y
             const distance = Math.sqrt(dx * dx + dy * dy)
             
-            // TEMPO_BASE = 30 segundos por bloco para o MVP
             const config = await tx.serverConfig.findFirst()
             const speedMultiplier = config?.speedMultiplier || 1.0
 
-            let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+            const { UNIT_STATS } = require('./gameLogic/unitEconomy')
+            
+            // Encontrar a velocidade da tropa mais lenta entre as enviadas
+            let maxSpeedSec = 0
+            if (spear > 0) maxSpeedSec = Math.max(maxSpeedSec, UNIT_STATS.spear.speedSecPerBlock)
+            if (sword > 0) maxSpeedSec = Math.max(maxSpeedSec, UNIT_STATS.sword.speedSecPerBlock)
+            if (axe > 0) maxSpeedSec = Math.max(maxSpeedSec, UNIT_STATS.axe.speedSecPerBlock)
+
+            if (maxSpeedSec === 0) maxSpeedSec = 1800 // Fallback genérico caso falhe (30 min)
+
+            // Tempo total: Distância Euclidiana * Segundos por Bloco / SpeedGlobal
+            let tempoViagemMs = Math.round((distance * maxSpeedSec * 1000) / speedMultiplier)
+
+            // Buff de Velocidade contra Aldeias Bárbaras (Sem Dono)
+            if (target.userId === null) {
+                tempoViagemMs = Math.round(tempoViagemMs / 5)
+            }
+
             // Impede que o tempo seja menor que 1 segundo
             const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
 
@@ -669,8 +708,8 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
                 resources: true, 
                 buildings: true, 
                 units: true,
-                movementsOrigin: { where: { completed: false }, include: { target: { select: { name: true, x: true, y: true } } } },
-                movementsTarget: { where: { completed: false }, include: { origin: { select: { name: true, x: true, y: true } } } },
+                movementsOrigin: { where: { completed: false, type: { not: 'RETURN' } }, include: { target: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } } },
+                movementsTarget: { where: { completed: false }, include: { origin: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } } },
                 supportingSent: { include: { target: { select: { name: true, x: true, y: true } } } },
                 supportingReceived: { include: { owner: { select: { name: true, x: true, y: true, user: { select: { username: true } } } } } }
             }
@@ -773,11 +812,33 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
         const config = await prisma.serverConfig.findFirst()
         const speedMultiplier = config?.speedMultiplier || 1.0
 
-        const PRODUCAO_BASE_POR_HORA = 300 * speedMultiplier // MVP + Multiplicador de Evento
+        const activeBoosters = await prisma.villageBooster.findMany({
+            where: { villageId: id, endTime: { gt: agora } }
+        })
 
-        const novaMadeira = village.resources.wood + (village.buildings.timberCamp * PRODUCAO_BASE_POR_HORA * horasPassadas)
-        const novaArgila  = village.resources.clay  + (village.buildings.clayPit    * PRODUCAO_BASE_POR_HORA * horasPassadas)
-        const novoFerro   = village.resources.iron  + (village.buildings.ironMine   * PRODUCAO_BASE_POR_HORA * horasPassadas)
+        let woodMultiplier = speedMultiplier
+        let clayMultiplier = speedMultiplier
+        let ironMultiplier = speedMultiplier
+
+        for (const booster of activeBoosters) {
+            if (booster.boosterType === 'ALL_RESOURCES') {
+                woodMultiplier *= booster.multiplier
+                clayMultiplier *= booster.multiplier
+                ironMultiplier *= booster.multiplier
+            } else if (booster.boosterType === 'WOOD_PRODUCTION') {
+                woodMultiplier *= booster.multiplier
+            } else if (booster.boosterType === 'CLAY_PRODUCTION') {
+                clayMultiplier *= booster.multiplier
+            } else if (booster.boosterType === 'IRON_PRODUCTION') {
+                ironMultiplier *= booster.multiplier
+            }
+        }
+
+        const produzir = (nivel: number, mult: number) => Math.floor(300 * Math.pow(1.15, nivel)) * mult
+
+        const novaMadeira = village.resources.wood + (produzir(village.buildings.timberCamp, woodMultiplier) * horasPassadas)
+        const novaArgila  = village.resources.clay  + (produzir(village.buildings.clayPit, clayMultiplier) * horasPassadas)
+        const novoFerro   = village.resources.iron  + (produzir(village.buildings.ironMine, ironMultiplier) * horasPassadas)
 
         const recursosAtualizados = await prisma.villageResource.update({
             where: { villageId: id },
@@ -789,7 +850,13 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
             }
         })
 
-        return { ...village, resources: recursosAtualizados, activeQueue, activeUnitQueue }
+        return { 
+            ...village, 
+            resources: recursosAtualizados, 
+            activeQueue, 
+            activeUnitQueue, 
+            activeMultipliers: { wood: woodMultiplier, clay: clayMultiplier, iron: ironMultiplier } 
+        }
 
     } catch (error: any) {
         fastify.log.error({ msg: error.message, stack: error.stack }, `Erro ao buscar aldeia ${id}`)

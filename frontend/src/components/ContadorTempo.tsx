@@ -25,5 +25,13 @@ export default function ContadorTempo({ endTime }: PropriedadesContador) {
         return <span>Pronto! Sincronizando...</span>
     }
 
-    return <span>Faltam {Math.ceil(restante / 1000)}s</span>
+    const formatarTempo = (ms: number) => {
+        const totalSegundos = Math.ceil(ms / 1000)
+        const horas = Math.floor(totalSegundos / 3600)
+        const minutos = Math.floor((totalSegundos % 3600) / 60)
+        const segundos = totalSegundos % 60
+        return `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`
+    }
+
+    return <span>⏱ {formatarTempo(restante)}</span>
 }

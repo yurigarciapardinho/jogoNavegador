@@ -40,6 +40,8 @@ interface EstadoJogo {
     dadosAldeia: any | null
     filaAtiva: any[]
     filaUnidadesAtiva: any[]
+    activeMultipliers: { wood: number; clay: number; iron: number }
+    serverSpeed: number
     sincronizarAldeiaSilenciosa: () => Promise<void>
 }
 
@@ -49,14 +51,20 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
     dadosAldeia: null,
     filaAtiva: [],
     filaUnidadesAtiva: [],
+    activeMultipliers: { wood: 1.0, clay: 1.0, iron: 1.0 },
+    serverSpeed: 1.0,
     sincronizarAldeiaSilenciosa: async () => {
         const estado = get()
         if (!estado.token) return
         try {
             const dadosMeResponse = await api.get('/me/villages', estado.token)
-            const { villages, globalMessage, isDefeated } = dadosMeResponse
+            const { villages, globalMessage, isDefeated, serverSpeed } = dadosMeResponse
             
-            set({ mensagemGlobal: globalMessage || null, isDefeated: isDefeated || false })
+            set({ 
+                mensagemGlobal: globalMessage || null, 
+                isDefeated: isDefeated || false,
+                serverSpeed: serverSpeed || 1.0 
+            })
             
             if (villages && villages.length > 0) {
                 const idAldeia = villages[0].id
@@ -64,6 +72,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
                 
                 set({
                     dadosAldeia: dados,
+                    activeMultipliers: dados.activeMultipliers || { wood: 1.0, clay: 1.0, iron: 1.0 },
                     recursos: {
                         madeira: dados.resources.wood || 0,
                         argila: dados.resources.clay || 0,

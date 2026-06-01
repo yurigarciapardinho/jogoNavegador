@@ -21,7 +21,8 @@ DIR_BACKEND="$RAIZ/backend"
 DIR_FRONTEND="$RAIZ/frontend"
 
 # PIDs dos processos filhos (preenchidos ao iniciar)
-PID_BACKEND=""
+PID_API=""
+PID_WORKER=""
 PID_FRONTEND=""
 
 # Flag para evitar reentrada na função de limpeza
@@ -34,10 +35,12 @@ limpeza() {
     echo ""
     echo -e "${AMARELO}${BOLD}Encerrando TW2 Clone...${RESET}"
 
-    [ -n "$PID_BACKEND" ]  && kill "$PID_BACKEND"  2>/dev/null || true
+    [ -n "$PID_API" ]  && kill "$PID_API"  2>/dev/null || true
+    [ -n "$PID_WORKER" ]  && kill "$PID_WORKER"  2>/dev/null || true
     [ -n "$PID_FRONTEND" ] && kill "$PID_FRONTEND" 2>/dev/null || true
 
-    wait "$PID_BACKEND"  2>/dev/null || true
+    wait "$PID_API"  2>/dev/null || true
+    wait "$PID_WORKER"  2>/dev/null || true
     wait "$PID_FRONTEND" 2>/dev/null || true
 
     echo -e "${VERDE}${BOLD}Sistema encerrado com sucesso.${RESET}"
@@ -174,26 +177,37 @@ echo -e "${AMARELO}Pressione Ctrl+C para encerrar ambos os serviços.${RESET}"
 echo -e "${BOLD}--------------------------------------------${RESET}"
 echo ""
 
-# ─── Inicia o backend em background com prefixo nos logs ─────────────────────
+# ─── Inicia a API do backend em background com prefixo nos logs ─────────────────────
 (
     cd "$DIR_BACKEND"
-    HOST="$HOST_ENV" npm run dev 2>&1 | while IFS= read -r linha; do
-        printf "\033[0;34m[Backend] \033[0m%s\n" "$linha"
+    HOST="$HOST_ENV" npm run dev:api 2>&1 | while IFS= read -r linha; do
+        printf "\033[0;34m[Backend API]\033[0m %s\n" "$linha"
     done
 ) &
-PID_BACKEND=$!
+PID_API=$!
 
-# Aguarda o backend subir antes de iniciar o frontend
-sleep 2
+# Aguarda a API subir um pouco antes de iniciar o Worker e o Frontend
+sleep 1
+
+# ─── Inicia o Worker de combate em background ─────────────────────────────────────
+(
+    cd "$DIR_BACKEND"
+    HOST="$HOST_ENV" npm run dev:worker 2>&1 | while IFS= read -r linha; do
+        printf "\033[0;35m[Worker]\033[0m      %s\n" "$linha"
+    done
+) &
+PID_WORKER=$!
+
+sleep 1
 
 # ─── Inicia o frontend em background com prefixo nos logs ────────────────────
 (
     cd "$DIR_FRONTEND"
     npm run dev -- $FRONTEND_ARGS 2>&1 | while IFS= read -r linha; do
-        printf "\033[0;36m[Frontend]\033[0m%s\n" "$linha"
+        printf "\033[0;36m[Frontend]\033[0m    %s\n" "$linha"
     done
 ) &
 PID_FRONTEND=$!
 
-# Aguarda ambos — bloqueia até Ctrl+C ou até um processo encerrar inesperadamente
-wait $PID_BACKEND $PID_FRONTEND
+# Aguarda todos — bloqueia até Ctrl+C ou até um processo encerrar inesperadamente
+wait $PID_API $PID_WORKER $PID_FRONTEND

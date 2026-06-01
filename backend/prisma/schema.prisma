@@ -63,10 +63,27 @@ model Village {
   supportingSent     SupportingTroop[] @relation("OwnerVillage")
   supportingReceived SupportingTroop[] @relation("StationedVillage")
 
+  // Boosters temporários granulares
+  boosters    VillageBooster[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([x, y])
+}
+
+model VillageBooster {
+  id             String   @id @default(uuid())
+  villageId      String
+  village        Village  @relation(fields: [villageId], references: [id])
+  
+  boosterType    String   // "ALL_RESOURCES", "WOOD_ONLY", "CLAY_ONLY", "IRON_ONLY", "RECRUIT_SPEED"
+  multiplier     Float    
+  
+  startTime      DateTime @default(now())
+  endTime        DateTime
+
+  @@index([villageId, endTime])
 }
 
 model VillageResource {
