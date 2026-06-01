@@ -22,7 +22,7 @@ export default function ContadorTempo({ endTime }: PropriedadesContador) {
             disparou.current = true
             sincronizarAldeiaSilenciosa()
         }
-        return <span>Pronto! Sincronizando...</span>
+        return <span className="animarPulsar" style={{ color: 'var(--corSucesso, #22c55e)', fontWeight: 'bold' }}>⏱ 00:00:00</span>
     }
 
     const formatarTempo = (ms: number) => {

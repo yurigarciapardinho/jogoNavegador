@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt'
 import { exec } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import { invalidarServerConfigCache } from '../utils/serverConfigCache'
 // Middleware inline de verificação Admin
 const adminMiddleware = async (request: any, reply: any) => {
     try {
@@ -345,6 +346,8 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
             where: { id: config.id },
             data: { maintenanceMode, speedMultiplier, globalMessage }
         })
+
+        invalidarServerConfigCache()
 
         await prisma.adminLog.create({
             data: { adminId, action: 'UPDATE_CONFIG', details: `Manutenção: ${maintenanceMode}, Velocidade: ${speedMultiplier}, Mensagem: ${globalMessage || 'Nenhuma'}` }
