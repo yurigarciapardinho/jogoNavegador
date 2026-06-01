@@ -139,7 +139,9 @@ export default function TelaMapa() {
         }
 
         try {
-            await api.post('/village/attack', {
+            const endpoint = tipo === 'ATTACK' ? '/village/attack' : '/village/support'
+            
+            await api.post(endpoint, {
                 originId: idAldeiaOrigem,
                 targetId: aldeiaSelecionada.id,
                 spear: qtdLanceiro,
