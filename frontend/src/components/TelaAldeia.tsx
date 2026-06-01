@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 import ContadorTempo from './ContadorTempo'
 import PainelMovimentos from './PainelMovimentos'
-import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso } from '../constantes/constantesJogo'
+import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso, obterCapacidadeArmazem } from '../constantes/constantesJogo'
 import { api } from '../api'
 
 export default function TelaAldeia() {
@@ -144,16 +144,35 @@ export default function TelaAldeia() {
             desativado = true
         }
 
-        let resourceKey: 'wood' | 'clay' | 'iron' = 'wood';
-        if (tipo === 'clayPit') resourceKey = 'clay';
-        if (tipo === 'ironMine') resourceKey = 'iron';
+        let detalheRendimento = null
+        if (tipo === 'timberCamp' || tipo === 'clayPit' || tipo === 'ironMine') {
+            let resourceKey: 'wood' | 'clay' | 'iron' = 'wood';
+            if (tipo === 'clayPit') resourceKey = 'clay';
+            if (tipo === 'ironMine') resourceKey = 'iron';
 
-        const buildingMult = activeMultipliers[resourceKey] || 1.0;
-        const isEventActive = buildingMult > 1.0;
-        
-        const prodAtual = obterProducaoRecurso(nivel, buildingMult)
-        const prodProx = obterProducaoRecurso(proximoNivel, buildingMult)
-        const uiColor = isEventActive ? '#eab308' : corDestaque;
+            const buildingMult = activeMultipliers[resourceKey] || 1.0;
+            const isEventActive = buildingMult > 1.0;
+            
+            const prodAtual = obterProducaoRecurso(nivel, buildingMult)
+            const prodProx = obterProducaoRecurso(proximoNivel, buildingMult)
+            const uiColor = isEventActive ? '#eab308' : corDestaque;
+
+            detalheRendimento = (
+                <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                    Rendimento: <span style={{ color: uiColor, fontWeight: isEventActive ? 'bold' : 'normal' }}>{prodAtual}/h</span> 
+                    {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)' }}>{prodProx}/h</span></span>}
+                </p>
+            )
+        } else if (tipo === 'warehouse') {
+            const capAtual = obterCapacidadeArmazem(nivel)
+            const capProx = obterCapacidadeArmazem(proximoNivel)
+            detalheRendimento = (
+                <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                    Capacidade: <span style={{ color: corDestaque, fontWeight: 'bold' }}>{capAtual}</span> 
+                    {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>{capProx}</span></span>}
+                </p>
+            )
+        }
 
         return (
             <div className="cartaoItem animarSurgimento">
@@ -163,10 +182,7 @@ export default function TelaAldeia() {
                             {nome} <span style={{ fontSize: '0.8rem', color: 'var(--corTextoSecundario)' }}>Nível {nivel}</span>
                         </p>
                         
-                        <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
-                            Rendimento: <span style={{ color: uiColor, fontWeight: isEventActive ? 'bold' : 'normal' }}>{prodAtual}/h</span> 
-                            {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)' }}>{prodProx}/h</span></span>}
-                        </p>
+                        {detalheRendimento}
 
                         {!estaNafila && (
                             <p className="cartaoItem_detalhe" style={{ marginTop: '4px' }}>
@@ -207,11 +223,26 @@ export default function TelaAldeia() {
                 </div>
             )}
 
-            <header className="painelRecursos">
-                <div className="recursoItem" style={{ color: '#d97706' }}>Madeira: {Math.floor(recursos.madeira)}</div>
-                <div className="recursoItem" style={{ color: '#ea580c' }}>Argila: {Math.floor(recursos.argila)}</div>
-                <div className="recursoItem" style={{ color: '#94a3b8' }}>Ferro: {Math.floor(recursos.ferro)}</div>
-            </header>
+            {(() => {
+                const capacidadeArmazem = dadosAldeia?.buildings ? obterCapacidadeArmazem(dadosAldeia.buildings.warehouse || 1) : 1500
+                const madeiraLotada = recursos.madeira >= capacidadeArmazem
+                const argilaLotada = recursos.argila >= capacidadeArmazem
+                const ferroLotado = recursos.ferro >= capacidadeArmazem
+
+                return (
+                    <header className="painelRecursos">
+                        <div className="recursoItem" style={{ color: madeiraLotada ? '#ef4444' : '#d97706', fontWeight: madeiraLotada ? 'bold' : 'normal' }}>
+                            Madeira: {Math.floor(recursos.madeira)} / {capacidadeArmazem} {madeiraLotada && '⚠️'}
+                        </div>
+                        <div className="recursoItem" style={{ color: argilaLotada ? '#ef4444' : '#ea580c', fontWeight: argilaLotada ? 'bold' : 'normal' }}>
+                            Argila: {Math.floor(recursos.argila)} / {capacidadeArmazem} {argilaLotada && '⚠️'}
+                        </div>
+                        <div className="recursoItem" style={{ color: ferroLotado ? '#ef4444' : '#94a3b8', fontWeight: ferroLotado ? 'bold' : 'normal' }}>
+                            Ferro: {Math.floor(recursos.ferro)} / {capacidadeArmazem} {ferroLotado && '⚠️'}
+                        </div>
+                    </header>
+                )
+            })()}
 
             <main className="gradePaineis">
                 <PainelMovimentos dadosAldeia={dadosAldeia} aoAtualizar={buscarAldeia} />
@@ -228,7 +259,7 @@ export default function TelaAldeia() {
                                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < filaAtiva.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                                     <span style={{ fontSize: '0.9rem', color: i === 0 ? '#fff' : 'var(--corTextoSecundario)' }}>
                                         <span style={{ display: 'inline-block', width: '20px', textAlign: 'center', background: i === 0 ? 'var(--corPrimaria)' : 'transparent', color: i === 0 ? '#000' : 'inherit', borderRadius: '4px', marginRight: '8px' }}>{i + 1}</span>
-                                        {item.buildingType === 'timberCamp' ? 'Bosque' : item.buildingType === 'clayPit' ? 'Poço de Argila' : 'Mina de Ferro'} Nível {item.targetLevel}
+                                        {item.buildingType === 'timberCamp' ? 'Bosque' : item.buildingType === 'clayPit' ? 'Poço de Argila' : item.buildingType === 'ironMine' ? 'Mina de Ferro' : 'Armazém'} Nível {item.targetLevel}
                                     </span>
                                     <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: i === 0 ? 'var(--corSucesso)' : 'var(--corTextoSecundario)' }}>
                                         {i === 0 ? <ContadorTempo endTime={item.endTime} /> : 'Aguardando...'}
@@ -243,6 +274,7 @@ export default function TelaAldeia() {
                             {renderizarLinhaEdificio('timberCamp', 'Bosque (Madeira)', dadosAldeia.buildings.timberCamp, '#d97706')}
                             {renderizarLinhaEdificio('clayPit', 'Poço de Argila', dadosAldeia.buildings.clayPit, '#ea580c')}
                             {renderizarLinhaEdificio('ironMine', 'Mina de Ferro', dadosAldeia.buildings.ironMine, '#94a3b8')}
+                            {renderizarLinhaEdificio('warehouse', 'Armazém', dadosAldeia.buildings.warehouse, '#a855f7')}
                         </div>
                     ) : (
                         <p className="telaGeral_texto">Carregando edifícios...</p>

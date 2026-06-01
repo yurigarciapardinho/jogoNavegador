@@ -1,6 +1,8 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { gerarCoordenadaSpawn } from './utils/spawn'
+import { atualizarEstadoAldeia } from './gameLogic/villageState'
+import { obterServerConfigCached } from './utils/serverConfigCache'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
@@ -75,7 +77,7 @@ fastify.addHook('preHandler', async (request, reply) => {
     // Rotas de autenticação ou leitura não restrita não devem ser totalmente bloqueadas para admins tentarem logar
     if (request.routerPath?.startsWith('/auth/')) return
 
-    const config = await prisma.serverConfig.findFirst()
+    const config = await obterServerConfigCached(prisma)
     if (config?.maintenanceMode) {
         // Permitir admins de continuar
         try {
@@ -118,11 +120,11 @@ fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (re
         if (!dbUser?.isDefeated) {
             await prisma.user.update({ where: { id: user.id }, data: { isDefeated: true } })
         }
-        const config = await prisma.serverConfig.findFirst()
+        const config = await obterServerConfigCached(prisma)
         return { villages: [], isDefeated: true, globalMessage: config?.globalMessage || null, role: dbUser?.role, serverSpeed: config?.speedMultiplier || 1.0 }
     }
 
-    const config = await prisma.serverConfig.findFirst()
+    const config = await obterServerConfigCached(prisma)
 
     return { 
         villages, 
@@ -292,6 +294,9 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     try {
         await prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM "Village" WHERE id = ${villageId} FOR UPDATE`
+
+            const agora = new Date()
+            await atualizarEstadoAldeia(tx, villageId, agora)
 
             const cost = {
                 wood: stats.cost.wood * amount,
@@ -533,7 +538,7 @@ fastify.post('/village/support/recall', { preValidation: [fastify.authenticate] 
     const dy = support.target.y - support.owner.y
     const distance = Math.sqrt(dx * dx + dy * dy)
     
-    const config = await prisma.serverConfig.findFirst()
+    const config = await obterServerConfigCached(prisma)
     const speedMultiplier = config?.speedMultiplier || 1.0
     let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
     const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
@@ -572,7 +577,7 @@ fastify.post('/village/support/send-back', { preValidation: [fastify.authenticat
     const dy = support.target.y - support.owner.y
     const distance = Math.sqrt(dx * dx + dy * dy)
     
-    const config = await prisma.serverConfig.findFirst()
+    const config = await obterServerConfigCached(prisma)
     const speedMultiplier = config?.speedMultiplier || 1.0
     let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
     const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
@@ -628,6 +633,9 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
     try {
         await prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM "Village" WHERE id = ${villageId} FOR UPDATE`
+
+            const agora = new Date()
+            await atualizarEstadoAldeia(tx, villageId, agora)
 
             const activeBuilds = await tx.buildingQueue.findMany({
                 where: { villageId, buildingType, completed: false }
@@ -689,132 +697,70 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
         if (erro.message === 'INSUFFICIENT_RESOURCES') {
             return reply.code(400).send({ error: 'Recursos insuficientes. Tentativa de concorrência detectada.' })
         }
-        throw erro
+        fastify.log.error({ erro }, 'Erro ao iniciar construção')
+        return reply.code(500).send({ error: erro.message || 'Erro ao iniciar construção' })
     }
-
-    return { message: 'Construção enviada para a fila' }
 })
 
 fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const user = request.user as { id: string }
 
-    fastify.log.info(`Requisição: GET /village/${id} — buscando aldeia`)
+    fastify.log.info(`Requisição: GET /village/${id} — buscando aldeia de forma otimizada`)
 
     try {
-        const village = await prisma.village.findUnique({
-            where: { id, userId: user.id },
-            include: { 
-                resources: true, 
-                buildings: true, 
-                units: true,
-                movementsOrigin: { where: { completed: false, type: { not: 'RETURN' } }, include: { target: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } } },
-                movementsTarget: { where: { completed: false }, include: { origin: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } } },
-                supportingSent: { include: { target: { select: { name: true, x: true, y: true } } } },
-                supportingReceived: { include: { owner: { select: { name: true, x: true, y: true, user: { select: { username: true } } } } } }
-            }
-        })
-
-        if (!village) {
-            fastify.log.warn(`Aldeia não encontrada: ${id}`)
-            return reply.code(404).send({ error: `Aldeia com id "${id}" não encontrada ou sem permissão.` })
-        }
-
-        if (!village.resources || !village.buildings) {
-            fastify.log.warn(`Aldeia com dados incompletos no banco: ${id}`)
-            return reply.code(500).send({ error: `A aldeia "${id}" existe mas está sem recursos ou construções. Execute o seed novamente.` })
-        }
-
         const agora = new Date()
-        
-        // ---- Processar Filas de Construção Pendentes ----
-        const completedQueues = await prisma.buildingQueue.findMany({
-            where: {
-                villageId: id,
-                completed: false,
-                endTime: { lte: agora }
-            },
-            orderBy: { endTime: 'asc' }
-        })
 
-        if (completedQueues.length > 0) {
-            let buildingsToUpdate = { ...village.buildings } as any
-            
-            for (const q of completedQueues) {
-                buildingsToUpdate[q.buildingType] = q.targetLevel
-                
-                await prisma.buildingQueue.update({
-                    where: { id: q.id },
-                    data: { completed: true }
-                })
-            }
-            
-            delete buildingsToUpdate.id
-            delete buildingsToUpdate.villageId
-            
-            const updatedBuildings = await prisma.villageBuilding.update({
-                where: { villageId: id },
-                data: buildingsToUpdate
-            })
-            
-            village.buildings = updatedBuildings
-        }
-        
-        // Também buscar a fila não concluída para o frontend saber o que está rolando
-        const activeQueue = await prisma.buildingQueue.findMany({
-            where: { villageId: id, completed: false },
-            orderBy: { endTime: 'asc' }
-        })
+        // 1. Sincroniza e consolida a economia atômica passando o cliente prisma (sem transação interativa desnecessária)
+        const villageState = await atualizarEstadoAldeia(prisma, id, agora)
 
-        // ---- Processar Filas de Tropas Pendentes ----
-        const completedUnitQueues = await prisma.unitQueue.findMany({
-            where: {
-                villageId: id,
-                completed: false,
-                endTime: { lte: agora }
-            },
-            orderBy: { endTime: 'asc' }
-        })
-
-        if (completedUnitQueues.length > 0) {
-            let unitsToUpdate = { ...village.units } as any
-            
-            for (const q of completedUnitQueues) {
-                unitsToUpdate[q.unitType] = (unitsToUpdate[q.unitType] || 0) + q.amount
-                
-                await prisma.unitQueue.update({
-                    where: { id: q.id },
-                    data: { completed: true }
-                })
-            }
-            
-            delete unitsToUpdate.id
-            delete unitsToUpdate.villageId
-            
-            const updatedUnits = await prisma.villageUnit.update({
-                where: { villageId: id },
-                data: unitsToUpdate
-            })
-            
-            village.units = updatedUnits
+        if (villageState.userId !== user.id) {
+            fastify.log.warn(`Acesso não autorizado: Usuário ${user.id} tentando acessar aldeia ${id}`)
+            return reply.code(403).send({ error: 'Você não tem permissão para acessar esta aldeia.' })
         }
 
-        const activeUnitQueue = await prisma.unitQueue.findMany({
-            where: { villageId: id, completed: false },
-            orderBy: { endTime: 'asc' }
-        })
+        // 2. Busca todos os outros dados dependentes da aldeia em paralelo (1x RTT no banco)
+        const [
+            movementsOrigin,
+            movementsTarget,
+            supportingSent,
+            supportingReceived,
+            activeQueue,
+            activeUnitQueue,
+            activeBoosters,
+            config
+        ] = await Promise.all([
+            prisma.movement.findMany({
+                where: { originId: id, completed: false, type: { not: 'RETURN' } },
+                include: { target: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } }
+            }),
+            prisma.movement.findMany({
+                where: { targetId: id, completed: false },
+                include: { origin: { select: { name: true, x: true, y: true, userId: true, user: { select: { username: true } } } } }
+            }),
+            prisma.supportingTroop.findMany({
+                where: { ownerId: id },
+                include: { target: { select: { name: true, x: true, y: true } } }
+            }),
+            prisma.supportingTroop.findMany({
+                where: { targetId: id },
+                include: { owner: { select: { name: true, x: true, y: true, user: { select: { username: true } } } } }
+            }),
+            prisma.buildingQueue.findMany({
+                where: { villageId: id, completed: false },
+                orderBy: { endTime: 'asc' }
+            }),
+            prisma.unitQueue.findMany({
+                where: { villageId: id, completed: false },
+                orderBy: { endTime: 'asc' }
+            }),
+            prisma.villageBooster.findMany({
+                where: { villageId: id, endTime: { gt: agora } }
+            }),
+            obterServerConfigCached(prisma)
+        ])
 
-        // ---- Processar Geração Passiva de Recursos ----
-        const ultimaAtualizacao = new Date(village.resources.lastUpdate)
-        const msMpassados = agora.getTime() - ultimaAtualizacao.getTime()
-        const horasPassadas = msMpassados / (1000 * 60 * 60)
-
-        const config = await prisma.serverConfig.findFirst()
         const speedMultiplier = config?.speedMultiplier || 1.0
-
-        const activeBoosters = await prisma.villageBooster.findMany({
-            where: { villageId: id, endTime: { gt: agora } }
-        })
 
         let woodMultiplier = speedMultiplier
         let clayMultiplier = speedMultiplier
@@ -834,27 +780,14 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
             }
         }
 
-        const produzir = (nivel: number, mult: number) => Math.floor(300 * Math.pow(1.15, nivel)) * mult
-
-        const novaMadeira = village.resources.wood + (produzir(village.buildings.timberCamp, woodMultiplier) * horasPassadas)
-        const novaArgila  = village.resources.clay  + (produzir(village.buildings.clayPit, clayMultiplier) * horasPassadas)
-        const novoFerro   = village.resources.iron  + (produzir(village.buildings.ironMine, ironMultiplier) * horasPassadas)
-
-        const recursosAtualizados = await prisma.villageResource.update({
-            where: { villageId: id },
-            data: {
-                wood:       novaMadeira,
-                clay:       novaArgila,
-                iron:       novoFerro,
-                lastUpdate: agora
-            }
-        })
-
         return { 
-            ...village, 
-            resources: recursosAtualizados, 
-            activeQueue, 
-            activeUnitQueue, 
+            ...villageState, 
+            movementsOrigin,
+            movementsTarget,
+            supportingSent,
+            supportingReceived,
+            activeQueue,
+            activeUnitQueue,
             activeMultipliers: { wood: woodMultiplier, clay: clayMultiplier, iron: ironMultiplier } 
         }
 

@@ -57,17 +57,25 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
         const estado = get()
         if (!estado.token) return
         try {
-            const dadosMeResponse = await api.get('/me/villages', estado.token)
-            const { villages, globalMessage, isDefeated, serverSpeed } = dadosMeResponse
-            
-            set({ 
-                mensagemGlobal: globalMessage || null, 
-                isDefeated: isDefeated || false,
-                serverSpeed: serverSpeed || 1.0 
-            })
-            
-            if (villages && villages.length > 0) {
-                const idAldeia = villages[0].id
+            let idAldeia = estado.dadosAldeia?.id
+
+            if (!idAldeia) {
+                // Primeira sincronização ou cache vazio: busca aldeias e configurações globais
+                const dadosMeResponse = await api.get('/me/villages', estado.token)
+                const { villages, globalMessage, isDefeated, serverSpeed } = dadosMeResponse
+                
+                set({ 
+                    mensagemGlobal: globalMessage || null, 
+                    isDefeated: isDefeated || false,
+                    serverSpeed: serverSpeed || 1.0 
+                })
+                
+                if (villages && villages.length > 0) {
+                    idAldeia = villages[0].id
+                }
+            }
+
+            if (idAldeia) {
                 const dados = await api.get(`/village/${idAldeia}`, estado.token)
                 
                 set({
@@ -82,8 +90,9 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
                     filaUnidadesAtiva: dados.activeUnitQueue || []
                 })
             }
-        } catch (erro) {
-            // Falha silenciosa para não quebrar a UX em caso de instabilidade de rede
+        } catch (erro: any) {
+            // Em caso de erro (ex: aldeia deletada ou token expirado), limpa o cache para forçar a redestribuição
+            set({ dadosAldeia: null })
         }
     },
     mensagemGlobal: null,

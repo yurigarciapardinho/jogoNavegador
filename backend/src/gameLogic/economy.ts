@@ -5,7 +5,8 @@ export const getBuildingCost = (buildingType: string, level: number) => {
         clayPit:    { wood: 65, clay: 50, iron: 40, timeSec: 15 },
         ironMine:   { wood: 75, clay: 65, iron: 70, timeSec: 18 },
         headquarters: { wood: 90, clay: 80, iron: 70, timeSec: 30 },
-        barracks:     { wood: 200, clay: 170, iron: 90, timeSec: 60 }
+        barracks:     { wood: 200, clay: 170, iron: 90, timeSec: 60 },
+        warehouse:    { wood: 60, clay: 50, iron: 40, timeSec: 12 }
     }
     
     const base = bases[buildingType] || { wood: 50, clay: 50, iron: 50, timeSec: 10 }
@@ -37,4 +38,8 @@ export const calculatePoints = (buildings: any): number => {
     points += (buildings.wall || 0) * 8
     points += (buildings.church || 0) * 50
     return points
+}
+
+export const getWarehouseCapacity = (level: number): number => {
+    return Math.floor(1500 * Math.pow(1.5, level - 1))
 }

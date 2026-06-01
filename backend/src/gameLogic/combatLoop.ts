@@ -1,4 +1,6 @@
 import { getUnitStats } from './unitEconomy'
+import { atualizarEstadoAldeia } from './villageState'
+import { getWarehouseCapacity } from './economy'
 
 const calculateCombat = (atkUnits: any, defUnits: any) => {
     let atkPower = 0
@@ -64,8 +66,15 @@ export const startCombatLoop = (prisma: any) => {
             for (const mov of arrivedMovements) {
                 await prisma.$transaction(async (tx: any) => {
                     if (mov.type === 'ATTACK') {
-                        const targetUnits = mov.target.units || { spear: 0, sword: 0, axe: 0 }
-                        const supportTroops = mov.target.supportingReceived || []
+                        // Sincroniza e consolida o estado do alvo até o momento exato do impacto (mov.arrivalTime)
+                        const targetUpdated = await atualizarEstadoAldeia(tx, mov.targetId, mov.arrivalTime)
+
+                        // Também recarregamos os suportes estacionados na aldeia alvo de forma fresca usando a transação
+                        const supportTroops = await tx.supportingTroop.findMany({
+                            where: { targetId: mov.targetId }
+                        })
+
+                        const targetUnits = targetUpdated.units || { spear: 0, sword: 0, axe: 0 }
                         
                         let defSpear = targetUnits.spear
                         let defSword = targetUnits.sword
@@ -122,7 +131,7 @@ export const startCombatLoop = (prisma: any) => {
                                 if (st) capacity += st.capacity * (combatResult.survivingAtk as any)[type]
                             }
                             
-                            const targetRes = mov.target.resources
+                            const targetRes = targetUpdated.resources
                             if (targetRes && capacity > 0) {
                                 const totalRes = targetRes.wood + targetRes.clay + targetRes.iron
                                 if (totalRes > 0) {
@@ -142,10 +151,10 @@ export const startCombatLoop = (prisma: any) => {
                                 }
                             }
 
-                            if (mov.target.userId === null) {
-                                const newAttacks = mov.target.attacksReceived + 1
+                            if (targetUpdated.userId === null) {
+                                const newAttacks = targetUpdated.attacksReceived + 1
                                 if (newAttacks >= 3) {
-                                    const b = mov.target.buildings
+                                    const b = targetUpdated.buildings
                                     if (b) {
                                         await tx.villageBuilding.update({
                                             where: { villageId: mov.targetId },
@@ -269,10 +278,8 @@ export const startCombatLoop = (prisma: any) => {
                         console.log(`[COMBAT] Apoio de ${mov.originId} chegou em ${mov.targetId}.`)
 
                     } else if (mov.type === 'RETURN') {
-                        const originVillage = await tx.village.findUnique({
-                            where: { id: mov.targetId }, 
-                            include: { units: true, resources: true }
-                        })
+                        // Sincroniza e consolida o estado da aldeia de origem até o momento da chegada das tropas (mov.arrivalTime)
+                        const originVillage = await atualizarEstadoAldeia(tx, mov.targetId, mov.arrivalTime)
 
                         if (originVillage) {
                             if (originVillage.units) {
@@ -287,12 +294,13 @@ export const startCombatLoop = (prisma: any) => {
                             }
                             
                             if (originVillage.resources && (mov.wood > 0 || mov.clay > 0 || mov.iron > 0)) {
+                                const maxCap = getWarehouseCapacity(originVillage.buildings.warehouse)
                                 await tx.villageResource.update({
                                     where: { villageId: originVillage.id },
                                     data: {
-                                        wood: originVillage.resources.wood + mov.wood,
-                                        clay: originVillage.resources.clay + mov.clay,
-                                        iron: originVillage.resources.iron + mov.iron
+                                        wood: Math.min(maxCap, originVillage.resources.wood + mov.wood),
+                                        clay: Math.min(maxCap, originVillage.resources.clay + mov.clay),
+                                        iron: Math.min(maxCap, originVillage.resources.iron + mov.iron)
                                     }
                                 })
                             }

@@ -1,7 +1,8 @@
 export const BASES_EDIFICIOS: any = {
     timberCamp: { wood: 50, clay: 60, iron: 40, timeSec: 15 },
     clayPit:    { wood: 65, clay: 50, iron: 40, timeSec: 15 },
-    ironMine:   { wood: 75, clay: 65, iron: 70, timeSec: 18 }
+    ironMine:   { wood: 75, clay: 65, iron: 70, timeSec: 18 },
+    warehouse:  { wood: 60, clay: 50, iron: 40, timeSec: 12 }
 }
 
 export const obterCustoEdificio = (tipoEdificio: string, nivel: number) => {
@@ -28,4 +29,8 @@ export const obterPropriedadesUnidade = (tipo: string) => {
 
 export const obterProducaoRecurso = (nivel: number, speedMultiplier: number = 1.0) => {
     return Math.floor(300 * Math.pow(1.15, nivel)) * speedMultiplier
+}
+
+export const obterCapacidadeArmazem = (nivel: number) => {
+    return Math.floor(1500 * Math.pow(1.5, nivel - 1))
 }
