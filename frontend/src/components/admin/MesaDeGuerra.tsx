@@ -18,6 +18,12 @@ const MesaDeGuerra: React.FC = () => {
     const [modalConfirmacao, definirModalConfirmacao] = useState<{ id: string, name: string } | null>(null)
     const [modalSpawn, definirModalSpawn] = useState(false)
     const [quantidadeSpawn, definirQuantidadeSpawn] = useState<number>(5)
+    const [spawnPattern, definirSpawnPattern] = useState('small')
+    const [spawnMode, definirSpawnMode] = useState('global')
+    const [spawnCenterX, definirSpawnCenterX] = useState<number>(25)
+    const [spawnCenterY, definirSpawnCenterY] = useState<number>(25)
+    const [spawnRadius, definirSpawnRadius] = useState<number>(5)
+    const [carregandoSpawn, definirCarregandoSpawn] = useState(false)
 
     const carregar = async (paginaAtual = meta.page, termoBusca = busca, tipoFiltro = filtro) => {
         definirCarregando(true)
@@ -86,6 +92,13 @@ const MesaDeGuerra: React.FC = () => {
                 axe: modalEdicao.axe
             }, token)
 
+            await api.put(`/admin/village/${modalEdicao.id}/buildings`, {
+                headquarters: modalEdicao.headquarters, timberCamp: modalEdicao.timberCamp,
+                clayPit: modalEdicao.clayPit, ironMine: modalEdicao.ironMine,
+                farm: modalEdicao.farm, warehouse: modalEdicao.warehouse,
+                barracks: modalEdicao.barracks, wall: modalEdicao.wall, church: modalEdicao.church
+            }, token)
+
             adicionarNotificacao('Aldeia modificada com sucesso.', 'sucesso')
             definirModalEdicao(null)
             carregar()
@@ -97,15 +110,36 @@ const MesaDeGuerra: React.FC = () => {
     const confirmarSpawn = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!quantidadeSpawn || isNaN(quantidadeSpawn) || quantidadeSpawn <= 0) return
+        if (carregandoSpawn) return
 
+        definirCarregandoSpawn(true)
         try {
-            await api.post('/admin/barbarians/spawn', { amount: quantidadeSpawn }, token)
-            adicionarNotificacao(`${quantidadeSpawn} Bárbaras criadas com sucesso.`, 'sucesso')
+            await api.post('/admin/barbarians/spawn', { 
+                amount: quantidadeSpawn,
+                pattern: spawnPattern,
+                mode: spawnMode,
+                centerX: spawnCenterX,
+                centerY: spawnCenterY,
+                radius: spawnRadius
+            }, token)
+            adicionarNotificacao(`${quantidadeSpawn} Bárbaras (${spawnPattern}) criadas com sucesso.`, 'sucesso')
             carregar()
         } catch (e: any) {
             adicionarNotificacao('Erro: ' + e.message, 'erro')
         } finally {
+            definirCarregandoSpawn(false)
             definirModalSpawn(false)
+        }
+    }
+
+    const limparBarbaras = async () => {
+        if (!window.confirm("ATENÇÃO: Deseja obliterar TODAS as bárbaras do mapa? Essa ação é imediata e irreversível.")) return
+        try {
+            const res = await api.del('/admin/barbarians/clear', token)
+            adicionarNotificacao(`${res.deletedCount} Bárbaras foram pulverizadas.`, 'sucesso')
+            carregar()
+        } catch (e: any) {
+            adicionarNotificacao('Erro: ' + e.message, 'erro')
         }
     }
 
@@ -166,11 +200,18 @@ const MesaDeGuerra: React.FC = () => {
                     </div>
 
                     <button 
+                        onClick={limparBarbaras} 
+                        className="botaoGeral"
+                        style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(244, 67, 54, 0.1)', color: '#E57373', border: '1px solid rgba(244, 67, 54, 0.3)' }}
+                    >
+                        <Trash2 size={18} /> Limpar Bárbaras
+                    </button>
+                    <button 
                         onClick={() => definirModalSpawn(true)} 
                         className="botaoGeral botaoGeral--primario"
                         style={{ display: 'flex', gap: '8px', alignItems: 'center', boxShadow: '0 4px 15px rgba(76, 175, 80, 0.3)' }}
                     >
-                        <ShieldAlert size={18} /> Spawnar Bárbaras
+                        <ShieldAlert size={18} /> Centro de Bárbaras
                     </button>
                 </div>
             </div>
@@ -236,7 +277,10 @@ const MesaDeGuerra: React.FC = () => {
                                         onClick={() => definirModalEdicao({
                                             id: ald.id, name: ald.name,
                                             wood: Math.floor(ald.resources?.wood || 0), clay: Math.floor(ald.resources?.clay || 0), iron: Math.floor(ald.resources?.iron || 0),
-                                            spear: ald.units?.spear || 0, sword: ald.units?.sword || 0, axe: ald.units?.axe || 0
+                                            spear: ald.units?.spear || 0, sword: ald.units?.sword || 0, axe: ald.units?.axe || 0,
+                                            headquarters: ald.buildings?.headquarters || 1, timberCamp: ald.buildings?.timberCamp || 0, clayPit: ald.buildings?.clayPit || 0,
+                                            ironMine: ald.buildings?.ironMine || 0, farm: ald.buildings?.farm || 1, warehouse: ald.buildings?.warehouse || 1,
+                                            barracks: ald.buildings?.barracks || 0, wall: ald.buildings?.wall || 0, church: ald.buildings?.church || 0
                                         })}
                                         style={{ 
                                             background: 'rgba(33, 150, 243, 0.1)', border: '1px solid rgba(33, 150, 243, 0.3)', 
@@ -303,21 +347,38 @@ const MesaDeGuerra: React.FC = () => {
             {/* Modal de Edição */}
             {modalEdicao && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <form onSubmit={salvarEdicao} style={{ backgroundColor: 'var(--corFundoSecundaria)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '450px', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+                    <form onSubmit={salvarEdicao} style={{ backgroundColor: 'var(--corFundoEscuro)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '450px', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
                         <h3 style={{ color: 'white', marginTop: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: '10px' }}><Edit3 size={20} color="var(--corPrimaria)" /> Editar {modalEdicao.name}</h3>
                         
                         <div style={{ color: '#aaa', fontSize: '12px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>Recursos Mágicos</div>
                         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Madeira <input type="number" value={modalEdicao.wood} onChange={e => definirModalEdicao({...modalEdicao, wood: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Argila <input type="number" value={modalEdicao.clay} onChange={e => definirModalEdicao({...modalEdicao, clay: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Ferro <input type="number" value={modalEdicao.iron} onChange={e => definirModalEdicao({...modalEdicao, iron: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Madeira <input type="number" value={modalEdicao.wood.toString()} onChange={e => definirModalEdicao({...modalEdicao, wood: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Argila <input type="number" value={modalEdicao.clay.toString()} onChange={e => definirModalEdicao({...modalEdicao, clay: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Ferro <input type="number" value={modalEdicao.iron.toString()} onChange={e => definirModalEdicao({...modalEdicao, iron: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
                         </div>
 
                         <div style={{ color: '#aaa', fontSize: '12px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>Exército Fantasma</div>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Lanceiros <input type="number" value={modalEdicao.spear.toString()} onChange={e => definirModalEdicao({...modalEdicao, spear: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Espadachins <input type="number" value={modalEdicao.sword.toString()} onChange={e => definirModalEdicao({...modalEdicao, sword: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Machados <input type="number" value={modalEdicao.axe.toString()} onChange={e => definirModalEdicao({...modalEdicao, axe: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                        </div>
+
+                        <div style={{ color: '#aaa', fontSize: '12px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>Infraestrutura Civil</div>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Sede <input type="number" value={modalEdicao.headquarters.toString()} onChange={e => definirModalEdicao({...modalEdicao, headquarters: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Bosque <input type="number" value={modalEdicao.timberCamp.toString()} onChange={e => definirModalEdicao({...modalEdicao, timberCamp: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Poço Argila <input type="number" value={modalEdicao.clayPit.toString()} onChange={e => definirModalEdicao({...modalEdicao, clayPit: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Mina Ferro <input type="number" value={modalEdicao.ironMine.toString()} onChange={e => definirModalEdicao({...modalEdicao, ironMine: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Fazenda <input type="number" value={modalEdicao.farm.toString()} onChange={e => definirModalEdicao({...modalEdicao, farm: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Armazém <input type="number" value={modalEdicao.warehouse.toString()} onChange={e => definirModalEdicao({...modalEdicao, warehouse: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                        </div>
                         <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Lanceiros <input type="number" value={modalEdicao.spear} onChange={e => definirModalEdicao({...modalEdicao, spear: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Espadachins <input type="number" value={modalEdicao.sword} onChange={e => definirModalEdicao({...modalEdicao, sword: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
-                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Machados <input type="number" value={modalEdicao.axe} onChange={e => definirModalEdicao({...modalEdicao, axe: Number(e.target.value)})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Quartel <input type="number" value={modalEdicao.barracks.toString()} onChange={e => definirModalEdicao({...modalEdicao, barracks: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Muralha <input type="number" value={modalEdicao.wall.toString()} onChange={e => definirModalEdicao({...modalEdicao, wall: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
+                            <label style={{ color: '#ccc', flex: 1, fontSize: '14px' }}>Igreja <input type="number" value={modalEdicao.church.toString()} onChange={e => definirModalEdicao({...modalEdicao, church: parseInt(e.target.value, 10) || 0})} style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '6px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white' }} /></label>
                         </div>
 
                         <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
@@ -331,7 +392,7 @@ const MesaDeGuerra: React.FC = () => {
             {/* Modal de Confirmação */}
             {modalConfirmacao && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <div style={{ backgroundColor: 'var(--corFundoSecundaria)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '400px', textAlign: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+                    <div style={{ backgroundColor: 'var(--corFundoEscuro)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '400px', textAlign: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
                         <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'rgba(244, 67, 54, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px' }}>
                             <Trash2 size={24} color="#f44336" />
                         </div>
@@ -345,26 +406,99 @@ const MesaDeGuerra: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal de Spawn */}
+            {/* Modal Avançado de Spawn */}
             {modalSpawn && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <form onSubmit={confirmarSpawn} style={{ backgroundColor: 'var(--corFundoSecundaria)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '350px', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
-                        <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'rgba(33, 150, 243, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '15px' }}>
-                            <ShieldAlert size={24} color="#2196F3" />
+                    <form onSubmit={confirmarSpawn} style={{ backgroundColor: 'var(--corFundoEscuro)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '450px', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                            <div style={{ width: '45px', height: '45px', borderRadius: '50%', backgroundColor: 'rgba(33, 150, 243, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <ShieldAlert size={22} color="#2196F3" />
+                            </div>
+                            <div>
+                                <h3 style={{ color: 'white', margin: 0, fontWeight: 500 }}>Centro de Invocação de Bárbaras</h3>
+                                <p style={{ color: '#aaa', margin: '3px 0 0', fontSize: '13px' }}>Gere aldeias selvagens com padrões avançados.</p>
+                            </div>
                         </div>
-                        <h3 style={{ color: 'white', marginTop: 0, fontWeight: 500 }}>Spawnar Bárbaras</h3>
-                        <p style={{ color: '#aaa', marginBottom: '20px', fontSize: '14px', lineHeight: '1.5' }}>Quantas aldeias selvagens deseja espalhar aleatoriamente pelo mundo?</p>
-                        <input 
-                            type="number" 
-                            value={quantidadeSpawn} 
-                            onChange={(e) => definirQuantidadeSpawn(Number(e.target.value))} 
-                            style={{ width: '100%', padding: '12px', marginBottom: '25px', borderRadius: '8px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '16px', textAlign: 'center' }}
-                            min="1"
-                            max="500"
-                        />
-                        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+
+                        <div style={{ marginBottom: '15px' }}>
+                            <label style={{ display: 'block', color: '#ccc', fontSize: '13px', marginBottom: '8px', fontWeight: 'bold' }}>Quantidade de Aldeias</label>
+                            <input 
+                                type="number" 
+                                value={quantidadeSpawn} 
+                                onChange={(e) => definirQuantidadeSpawn(Number(e.target.value))} 
+                                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #444', backgroundColor: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '15px' }}
+                                min="1" max="500"
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '15px' }}>
+                            <label style={{ display: 'block', color: '#ccc', fontSize: '13px', marginBottom: '8px', fontWeight: 'bold' }}>Padrão Evolutivo (Template)</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {['small', 'medium', 'large'].map(pat => (
+                                    <button 
+                                        type="button" 
+                                        key={pat} 
+                                        onClick={() => definirSpawnPattern(pat)}
+                                        style={{ 
+                                            flex: 1, padding: '8px', borderRadius: '8px', border: spawnPattern === pat ? '1px solid #2196F3' : '1px solid #444',
+                                            backgroundColor: spawnPattern === pat ? 'rgba(33,150,243,0.1)' : 'rgba(0,0,0,0.3)',
+                                            color: spawnPattern === pat ? '#2196F3' : '#aaa', cursor: 'pointer', transition: 'all 0.2s', textTransform: 'capitalize'
+                                        }}
+                                    >
+                                        {pat === 'small' ? 'Pequena' : pat === 'medium' ? 'Média' : 'Avançada'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '15px' }}>
+                            <label style={{ display: 'block', color: '#ccc', fontSize: '13px', marginBottom: '8px', fontWeight: 'bold' }}>Modo de Posicionamento</label>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                <button 
+                                    type="button" 
+                                    onClick={() => definirSpawnMode('global')}
+                                    style={{ flex: 1, padding: '8px', borderRadius: '8px', border: spawnMode === 'global' ? '1px solid #4CAF50' : '1px solid #444', backgroundColor: spawnMode === 'global' ? 'rgba(76,175,80,0.1)' : 'rgba(0,0,0,0.3)', color: spawnMode === 'global' ? '#4CAF50' : '#aaa', cursor: 'pointer', transition: 'all 0.2s' }}
+                                >
+                                    Global Caótico
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => definirSpawnMode('radius')}
+                                    style={{ flex: 1, padding: '8px', borderRadius: '8px', border: spawnMode === 'radius' ? '1px solid #4CAF50' : '1px solid #444', backgroundColor: spawnMode === 'radius' ? 'rgba(76,175,80,0.1)' : 'rgba(0,0,0,0.3)', color: spawnMode === 'radius' ? '#4CAF50' : '#aaa', cursor: 'pointer', transition: 'all 0.2s' }}
+                                >
+                                    Foco (Cluster)
+                                </button>
+                            </div>
+
+                            {spawnMode === 'radius' && (
+                                <div style={{ display: 'flex', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ color: '#888', fontSize: '11px', display: 'block' }}>Centro X</label>
+                                        <input type="number" value={spawnCenterX} onChange={e => definirSpawnCenterX(Number(e.target.value))} style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: '#fff' }} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ color: '#888', fontSize: '11px', display: 'block' }}>Centro Y</label>
+                                        <input type="number" value={spawnCenterY} onChange={e => definirSpawnCenterY(Number(e.target.value))} style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: '#fff' }} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ color: '#888', fontSize: '11px', display: 'block' }}>Raio</label>
+                                        <input type="number" value={spawnRadius} onChange={e => definirSpawnRadius(Number(e.target.value))} style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #555', background: '#111', color: '#fff' }} min="1" max="50" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', marginBottom: '20px', borderLeft: '3px solid #2196F3' }}>
+                            <small style={{ color: '#aaa', fontStyle: 'italic' }}>
+                                Previsão: Invocando {quantidadeSpawn} {quantidadeSpawn === 1 ? 'aldeia' : 'aldeias'} de porte <strong>{spawnPattern === 'small' ? 'Pequeno' : spawnPattern === 'medium' ? 'Médio' : 'Avançado'}</strong> no modo <strong>{spawnMode === 'global' ? 'Global e Caótico' : `Clusterizado [${spawnCenterX}|${spawnCenterY}] Raio ${spawnRadius}`}</strong>.
+                            </small>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
                             <button type="button" onClick={() => definirModalSpawn(false)} className="botaoGeral" style={{ background: 'transparent', border: '1px solid #555', color: '#ccc' }}>Cancelar</button>
-                            <button type="submit" className="botaoGeral" style={{ background: '#2196F3', border: 'none', color: 'white' }}>Confirmar</button>
+                            <button type="submit" disabled={carregandoSpawn} className="botaoGeral" style={{ background: '#2196F3', border: 'none', color: 'white', opacity: carregandoSpawn ? 0.7 : 1 }}>
+                                {carregandoSpawn ? 'Invocando...' : 'Realizar Invocação'}
+                            </button>
                         </div>
                     </form>
                 </div>

@@ -1,5 +1,7 @@
-@import "./variables.css";
-@import "./reset.css";
-@import "./layout.css";
-@import "./components.css";
-@import "./animations.css";
+@layer reset, tokens, layout, components, states;
+
+@import "./reset.css" layer(reset);
+@import "./variables.css" layer(tokens);
+@import "./layout.css" layer(layout);
+@import "./components.css" layer(components);
+@import "./animations.css" layer(states);

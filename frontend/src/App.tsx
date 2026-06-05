@@ -11,7 +11,7 @@ import TelaDerrota from './components/TelaDerrota'
 import AlertaAtaqueGlobal from './components/AlertaAtaqueGlobal'
 
 const App: React.FC = () => {
-    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
+    const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated, sincronizarAldeiaSilenciosa, userVillages, activeVillageId, trocarAldeiaAtiva } = usarEstadoJogo()
 
     React.useEffect(() => {
         if (!token) return
@@ -23,6 +23,28 @@ const App: React.FC = () => {
         
         return () => clearInterval(intervalo)
     }, [token])
+
+    // Atalhos globais para mudar de aldeia (Shift + Setas)
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+                if (userVillages.length > 1) {
+                    const currentIndex = userVillages.findIndex(v => v.id === activeVillageId)
+                    if (currentIndex !== -1) {
+                        let nextIndex = currentIndex
+                        if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % userVillages.length
+                        if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + userVillages.length) % userVillages.length
+                        
+                        if (nextIndex !== currentIndex) {
+                            trocarAldeiaAtiva(userVillages[nextIndex].id)
+                        }
+                    }
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [userVillages, activeVillageId, trocarAldeiaAtiva])
 
     if (token && isDefeated) {
         return <TelaDerrota />
@@ -67,7 +89,17 @@ const App: React.FC = () => {
             <header className="cabecalhoJogo">
                 <div className="cabecalhoJogo_areaLogo">
                     <div className="cabecalhoJogo_logo">TW2 Clone</div>
-                    {usuario && <span className="cabecalhoJogo_nomeJogador">Senhor(a) {usuario.nomeUsuario}</span>}
+                    {usuario && (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span className="cabecalhoJogo_nomeJogador">Senhor(a) {usuario.nomeUsuario}</span>
+                            {userVillages && userVillages.length > 0 && (
+                                <span style={{ fontSize: '0.85rem', color: 'var(--corPrimaria)', fontWeight: 'bold' }}>
+                                    🏰 {userVillages.find(v => v.id === activeVillageId)?.name || 'Carregando Aldeia...'}
+                                    {userVillages.length > 1 && <span style={{ fontSize: '0.7rem', color: 'var(--corTextoSecundario)', marginLeft: '4px' }}>(Shift + Setas para trocar)</span>}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <nav className="navegacaoPrincipal">
                     {usuario?.role !== 'ADMIN' && (
@@ -98,7 +130,7 @@ const App: React.FC = () => {
                             className={`botaoGeral ${telaAtual === 'admin' ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
                             style={{ border: '2px solid var(--corSucesso)' }}
                         >
-                            Painel Admin
+                            Administração
                         </button>
                     )}
                     <button 

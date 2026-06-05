@@ -2,7 +2,7 @@ import { getUnitStats } from './unitEconomy'
 import { atualizarEstadoAldeia } from './villageState'
 import { getWarehouseCapacity } from './economy'
 
-const calculateCombat = (atkUnits: any, defUnits: any) => {
+const calculateCombat = (atkUnits: any, defUnits: any, wallLevel: number = 0) => {
     let atkPower = 0
     let defPower = 0
 
@@ -14,6 +14,9 @@ const calculateCombat = (atkUnits: any, defUnits: any) => {
             if (defUnits[type]) defPower += stats.defense * defUnits[type]
         }
     }
+
+    // Bônus da Muralha: +5% poder multiplicativo e +50 flat por nível
+    defPower = defPower * (1 + (wallLevel * 0.05)) + (wallLevel * 50)
 
     if (atkPower === 0) atkPower = 1
     if (defPower === 0) defPower = 1
@@ -88,8 +91,9 @@ export const startCombatLoop = (prisma: any) => {
 
                         const atkUnits = { spear: mov.spear, sword: mov.sword, axe: mov.axe }
                         const defUnits = { spear: defSpear, sword: defSword, axe: defAxe }
+                        const wallLevel = targetUpdated.buildings?.wall || 0
                         
-                        const combatResult = calculateCombat(atkUnits, defUnits)
+                        const combatResult = calculateCombat(atkUnits, defUnits, wallLevel)
                         
                         const spearSurvival = defSpear > 0 ? combatResult.survivingDef.spear / defSpear : 0
                         const swordSurvival = defSword > 0 ? combatResult.survivingDef.sword / defSword : 0
@@ -203,15 +207,6 @@ export const startCombatLoop = (prisma: any) => {
                         let reportDefLostSword = defSword - combatResult.survivingDef.sword
                         let reportDefLostAxe = defAxe - combatResult.survivingDef.axe
 
-                        if (!combatResult.attackerWon) {
-                            reportDefSpear = -1
-                            reportDefSword = -1
-                            reportDefAxe = -1
-                            reportDefLostSpear = -1
-                            reportDefLostSword = -1
-                            reportDefLostAxe = -1
-                        }
-
                         await tx.combatReport.create({
                             data: {
                                 attackerId: mov.origin.userId || 'npc',
@@ -312,6 +307,50 @@ export const startCombatLoop = (prisma: any) => {
                         })
                         
                         console.log(`[COMBAT] Tropas retornaram para ${mov.targetId}.`)
+                    } else if (mov.type === 'TRANSPORT') {
+                        // Sincroniza e consolida o estado do alvo até o momento da chegada
+                        const targetUpdated = await atualizarEstadoAldeia(tx, mov.targetId, mov.arrivalTime)
+                        
+                        if (targetUpdated && targetUpdated.resources) {
+                            const maxCap = getWarehouseCapacity(targetUpdated.buildings?.warehouse || 0)
+                            
+                            await tx.villageResource.update({
+                                where: { villageId: mov.targetId },
+                                data: {
+                                    wood: Math.min(maxCap, targetUpdated.resources.wood + mov.wood),
+                                    clay: Math.min(maxCap, targetUpdated.resources.clay + mov.clay),
+                                    iron: Math.min(maxCap, targetUpdated.resources.iron + mov.iron)
+                                }
+                            })
+                        }
+                        
+                        await tx.movement.update({
+                            where: { id: mov.id },
+                            data: { completed: true }
+                        })
+                        
+                        const duration = mov.arrivalTime.getTime() - mov.startTime.getTime()
+                        const returnTime = new Date(now.getTime() + duration)
+                        
+                        await tx.movement.create({
+                            data: {
+                                type: 'TRANSPORT_RETURN',
+                                originId: mov.targetId,
+                                targetId: mov.originId,
+                                wood: mov.wood,
+                                clay: mov.clay,
+                                iron: mov.iron,
+                                arrivalTime: returnTime
+                            }
+                        })
+                        
+                        console.log(`[COMBAT] Transporte de ${mov.originId} entregou recursos em ${mov.targetId}. Mercadores retornando...`)
+                    } else if (mov.type === 'TRANSPORT_RETURN') {
+                        await tx.movement.update({
+                            where: { id: mov.id },
+                            data: { completed: true }
+                        })
+                        console.log(`[COMBAT] Mercadores retornaram para ${mov.targetId}.`)
                     }
                 })
             }

@@ -5,6 +5,8 @@ import { exec } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { invalidarServerConfigCache } from '../utils/serverConfigCache'
+import { deleteVillageSafely, transferVillageOwnership } from '../gameLogic/villageLifecycle'
+import { getWarehouseCapacity, MAX_LEVELS } from '../gameLogic/economy'
 // Middleware inline de verificação Admin
 const adminMiddleware = async (request: any, reply: any) => {
     try {
@@ -107,16 +109,68 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
         const { id } = request.params
         const { wood, clay, iron } = request.body
 
+        // Limita os recursos à capacidade do armazém da aldeia
+        const village = await prisma.village.findUnique({
+            where: { id },
+            include: { buildings: true }
+        })
+
+        if (!village) {
+            return reply.code(404).send({ error: 'Aldeia não encontrada.' })
+        }
+
+        const maxCapacity = getWarehouseCapacity(village.buildings?.warehouse || 1)
+        
+        const finalWood = Math.min(wood, maxCapacity)
+        const finalClay = Math.min(clay, maxCapacity)
+        const finalIron = Math.min(iron, maxCapacity)
+
         await prisma.villageResource.update({
             where: { villageId: id },
-            data: { wood, clay, iron }
+            data: { wood: finalWood, clay: finalClay, iron: finalIron }
         })
 
         await prisma.adminLog.create({
             data: {
                 adminId: request.user.id,
                 action: 'SET_RESOURCES',
-                details: JSON.stringify({ villageId: id, wood, clay, iron })
+                details: JSON.stringify({ villageId: id, wood: finalWood, clay: finalClay, iron: finalIron })
+            }
+        })
+
+        return { success: true }
+    })
+
+    // 3.5 Modificar Edifícios de uma Aldeia
+    fastify.put('/admin/village/:id/buildings', async (request: any, reply) => {
+        const { id } = request.params
+        const {
+            headquarters, timberCamp, clayPit, ironMine, farm, warehouse, barracks, wall, church
+        } = request.body
+
+        // Garante que não ultrapasse MAX_LEVELS e não seja menor que 0
+        const finalBlds = {
+            headquarters: Math.max(1, Math.min(headquarters || 1, MAX_LEVELS.headquarters || 25)),
+            timberCamp: Math.max(0, Math.min(timberCamp || 0, MAX_LEVELS.timberCamp || 25)),
+            clayPit: Math.max(0, Math.min(clayPit || 0, MAX_LEVELS.clayPit || 25)),
+            ironMine: Math.max(0, Math.min(ironMine || 0, MAX_LEVELS.ironMine || 25)),
+            farm: Math.max(1, Math.min(farm || 1, MAX_LEVELS.farm || 30)),
+            warehouse: Math.max(1, Math.min(warehouse || 1, MAX_LEVELS.warehouse || 30)),
+            barracks: Math.max(0, Math.min(barracks || 0, MAX_LEVELS.barracks || 25)),
+            wall: Math.max(0, Math.min(wall || 0, MAX_LEVELS.wall || 20)),
+            church: Math.max(0, Math.min(church || 0, MAX_LEVELS.church || 3))
+        }
+
+        await prisma.villageBuilding.update({
+            where: { villageId: id },
+            data: finalBlds
+        })
+
+        await prisma.adminLog.create({
+            data: {
+                adminId: request.user.id,
+                action: 'SET_BUILDINGS',
+                details: JSON.stringify({ villageId: id, ...finalBlds })
             }
         })
 
@@ -148,16 +202,9 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
     fastify.delete('/admin/village/:id', async (request: any, reply) => {
         const { id } = request.params
 
-        // Deleta em cascata manual (devido à falta de onDelete: Cascade no schema)
-        await prisma.$transaction([
-            prisma.villageResource.deleteMany({ where: { villageId: id } }),
-            prisma.villageBuilding.deleteMany({ where: { villageId: id } }),
-            prisma.villageUnit.deleteMany({ where: { villageId: id } }),
-            prisma.buildingQueue.deleteMany({ where: { villageId: id } }),
-            prisma.unitQueue.deleteMany({ where: { villageId: id } }),
-            prisma.movement.deleteMany({ where: { OR: [{ originId: id }, { targetId: id }] } }),
-            prisma.village.delete({ where: { id } })
-        ])
+        await prisma.$transaction(async (tx) => {
+            await deleteVillageSafely(tx, id, new Date())
+        })
 
         await prisma.adminLog.create({
             data: {
@@ -180,17 +227,42 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
 
     // 7. Spawn Barbarians
     fastify.post('/admin/barbarians/spawn', async (request: any, reply) => {
-        const { amount } = request.body
+        const { amount, pattern = 'small', mode = 'global', centerX = 25, centerY = 25, radius = 5 } = request.body
+
+        // Função utilitária para gerar número aleatório em um intervalo
+        const randRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
 
         for (let i = 0; i < amount; i++) {
+            // 1. Calcular Coordenadas Baseadas no Modo
+            let x = 0; let y = 0;
+            if (mode === 'radius') {
+                x = Math.max(0, Math.min(999, centerX + randRange(-radius, radius)))
+                y = Math.max(0, Math.min(999, centerY + randRange(-radius, radius)))
+            } else {
+                x = randRange(0, 999)
+                y = randRange(0, 999)
+            }
+
+            // 2. Determinar Níveis Baseados no Pattern
+            let bld = { hq: 1, tc: 1, cp: 1, im: 1, farm: 1, wh: 1, br: 0, wall: 0 }
+            let res = { w: 500, c: 500, i: 500 }
+            
+            if (pattern === 'medium') {
+                bld = { hq: randRange(5, 10), tc: randRange(5, 12), cp: randRange(5, 12), im: randRange(5, 12), farm: randRange(5, 10), wh: randRange(5, 10), br: randRange(1, 5), wall: randRange(1, 5) }
+                res = { w: 2500, c: 2500, i: 2500 }
+            } else if (pattern === 'large') {
+                bld = { hq: randRange(15, 20), tc: randRange(15, 20), cp: randRange(15, 20), im: randRange(15, 20), farm: randRange(15, 20), wh: randRange(15, 20), br: randRange(10, 15), wall: randRange(10, 15) }
+                res = { w: 15000, c: 15000, i: 15000 }
+            }
+
             await prisma.village.create({
                 data: {
                     name: 'Aldeia Bárbara',
-                    x: Math.floor(Math.random() * 50),
-                    y: Math.floor(Math.random() * 50),
+                    x,
+                    y,
                     userId: null, // Sem dono
-                    resources: { create: { wood: 500, clay: 500, iron: 500 } },
-                    buildings: { create: { headquarters: 1, timberCamp: 1, clayPit: 1, ironMine: 1, farm: 1, warehouse: 1, barracks: 0, wall: 0 } },
+                    resources: { create: { wood: res.w, clay: res.c, iron: res.i } },
+                    buildings: { create: { headquarters: bld.hq, timberCamp: bld.tc, clayPit: bld.cp, ironMine: bld.im, farm: bld.farm, warehouse: bld.wh, barracks: bld.br, wall: bld.wall } },
                     units: { create: { spear: 0, sword: 0, axe: 0 } }
                 }
             })
@@ -200,11 +272,37 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
             data: {
                 adminId: request.user.id,
                 action: 'SPAWN_BARBARIANS',
-                details: JSON.stringify({ amount })
+                details: JSON.stringify({ amount, pattern, mode, centerX, centerY, radius })
             }
         })
 
         return { success: true }
+    })
+
+    // 7.5 Limpar Bárbaras
+    fastify.delete('/admin/barbarians/clear', async (request: any, reply) => {
+        // Para simplificar a foreign_key, vamos deletar as relações primeiro ou usar onDelete Cascade
+        // Como o banco está configurado (depende do Prisma schema, mas deleteVillageSafely já lida com isso)
+        
+        const barbarians = await prisma.village.findMany({ where: { userId: null } })
+        let deletedCount = 0
+
+        await prisma.$transaction(async (tx) => {
+            for (const b of barbarians) {
+                await deleteVillageSafely(tx, b.id, new Date())
+                deletedCount++
+            }
+        })
+
+        await prisma.adminLog.create({
+            data: {
+                adminId: request.user.id,
+                action: 'CLEAR_BARBARIANS',
+                details: JSON.stringify({ deletedCount })
+            }
+        })
+
+        return { success: true, deletedCount }
     })
 
     // 8. Apagar Histórico de Logs
@@ -219,6 +317,125 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
             }
         })
         return { success: true }
+    })
+
+    // 8.1 Buscar Usuários Simples (Autocomplete)
+    fastify.get('/admin/users/search', async (request: any, reply) => {
+        const query = request.query.q as string || ''
+        if (query.length < 2) return []
+
+        const users = await prisma.user.findMany({
+            where: {
+                username: { contains: query, mode: 'insensitive' }
+            },
+            select: { id: true, username: true },
+            take: 10
+        })
+        return users
+    })
+
+    // 8.2 Mover Aldeia (Drag & Drop)
+    fastify.put('/admin/village/:id/move', async (request: any, reply) => {
+        const { id } = request.params
+        let { x, y } = request.body
+
+        // Limites matemáticos
+        x = Math.max(0, Math.min(999, parseInt(x) || 0))
+        y = Math.max(0, Math.min(999, parseInt(y) || 0))
+
+        try {
+            await prisma.village.update({
+                where: { id },
+                data: { x, y }
+            })
+            
+            await prisma.adminLog.create({
+                data: {
+                    adminId: request.user.id,
+                    action: 'MOVE_VILLAGE',
+                    details: JSON.stringify({ villageId: id, x, y })
+                }
+            })
+            return { success: true }
+        } catch (error: any) {
+            // Prisma error P2002: Unique constraint failed
+            if (error.code === 'P2002') {
+                return reply.code(409).send({ error: 'Coordenada já ocupada por outra aldeia.' })
+            }
+            return reply.code(500).send({ error: 'Erro ao mover aldeia.' })
+        }
+    })
+
+    // 8.3 Criar Aldeia Única no Mapa
+    fastify.post('/admin/village/spawn-single', async (request: any, reply) => {
+        let { x, y, type = 'barbarian', ownerUsername, pattern = 'medium' } = request.body
+
+        x = Math.max(0, Math.min(999, parseInt(x) || 0))
+        y = Math.max(0, Math.min(999, parseInt(y) || 0))
+
+        let userId: string | null = null
+        let villageName = 'Aldeia Bárbara'
+
+        if (type === 'player' && ownerUsername) {
+            const user = await prisma.user.findUnique({ where: { username: ownerUsername } })
+            if (!user) {
+                return reply.code(404).send({ error: 'Jogador não encontrado.' })
+            }
+            userId = user.id
+            
+            const villageCount = await prisma.village.count({ where: { userId: user.id } })
+            
+            const ordinals = ["Primeira", "Segunda", "Terceira", "Quarta", "Quinta", "Sexta", "Sétima", "Oitava", "Nona", "Décima"]
+            if (villageCount === 0) {
+                villageName = `Aldeia de ${user.username}`
+            } else if (villageCount < 10) {
+                villageName = `${ordinals[villageCount]} Aldeia de ${user.username}`
+            } else {
+                villageName = `${villageCount + 1}ª Aldeia de ${user.username}`
+            }
+        }
+
+        const randRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
+
+        let bld = { hq: 1, tc: 1, cp: 1, im: 1, farm: 1, wh: 1, br: 0, wall: 0 }
+        let res = { w: 500, c: 500, i: 500 }
+        
+        if (pattern === 'medium') {
+            bld = { hq: randRange(5, 10), tc: randRange(5, 12), cp: randRange(5, 12), im: randRange(5, 12), farm: randRange(5, 10), wh: randRange(5, 10), br: randRange(1, 5), wall: randRange(1, 5) }
+            res = { w: 2500, c: 2500, i: 2500 }
+        } else if (pattern === 'large') {
+            bld = { hq: randRange(15, 20), tc: randRange(15, 20), cp: randRange(15, 20), im: randRange(15, 20), farm: randRange(15, 20), wh: randRange(15, 20), br: randRange(10, 15), wall: randRange(10, 15) }
+            res = { w: 15000, c: 15000, i: 15000 }
+        }
+
+        try {
+            const village = await prisma.village.create({
+                data: {
+                    name: villageName,
+                    x,
+                    y,
+                    userId,
+                    resources: { create: { wood: res.w, clay: res.c, iron: res.i } },
+                    buildings: { create: { headquarters: bld.hq, timberCamp: bld.tc, clayPit: bld.cp, ironMine: bld.im, farm: bld.farm, warehouse: bld.wh, barracks: bld.br, wall: bld.wall } },
+                    units: { create: { spear: 0, sword: 0, axe: 0 } }
+                }
+            })
+
+            await prisma.adminLog.create({
+                data: {
+                    adminId: request.user.id,
+                    action: 'SPAWN_SINGLE',
+                    details: JSON.stringify({ x, y, type, ownerUsername, pattern })
+                }
+            })
+
+            return { success: true, village }
+        } catch (error: any) {
+            if (error.code === 'P2002') {
+                return reply.code(409).send({ error: 'Coordenada já ocupada por outra aldeia.' })
+            }
+            return reply.code(500).send({ error: 'Erro ao criar aldeia.' })
+        }
     })
 
     // 9. Gestão de Contas (Listar)
@@ -275,15 +492,14 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
         const { id } = request.params
         if (id === request.user.id) return reply.code(400).send({ error: 'Não pode apagar a si mesmo.' })
 
-        await prisma.$transaction([
-            // Transforma aldeias do usuário em Bárbaras
-            prisma.village.updateMany({
-                where: { userId: id },
-                data: { userId: null }
-            }),
-            // Deleta o usuário
-            prisma.user.delete({ where: { id } })
-        ])
+        await prisma.$transaction(async (tx) => {
+            const userVillages = await tx.village.findMany({ where: { userId: id } })
+            for (const v of userVillages) {
+                await transferVillageOwnership(tx, v.id, null)
+            }
+            await tx.userQuest.deleteMany({ where: { userId: id } })
+            await tx.user.delete({ where: { id } })
+        })
 
         await prisma.adminLog.create({
             data: { adminId: request.user.id, action: 'DELETE_USER', details: `Deletou o usuário ${id}. As aldeias viraram bárbaras.` }
@@ -304,6 +520,9 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
         }
 
         await prisma.$transaction([
+            prisma.userQuest.deleteMany({}),
+            prisma.villageBooster.deleteMany({}),
+            prisma.supportingTroop.deleteMany({}),
             prisma.combatReport.deleteMany({}),
             prisma.movement.deleteMany({}),
             prisma.unitQueue.deleteMany({}),

@@ -14,13 +14,17 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
 
     const ataquesSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'ATTACK')
     const apoiosSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'SUPPORT')
+    const mercadoresSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'TRANSPORT')
+
     const ataquesChegando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'ATTACK')
     const apoiosChegandoMov = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'SUPPORT')
+    const mercadoresChegando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'TRANSPORT')
+    const mercadoresRetornando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'TRANSPORT_RETURN')
 
     const tropasApoioFora = dadosAldeia?.supportingSent || []
     const tropasApoioDentro = dadosAldeia?.supportingReceived || []
 
-    const totalMovimentos = ataquesSaindo.length + apoiosSaindo.length + ataquesChegando.length + apoiosChegandoMov.length + retornosChegando.length + tropasApoioFora.length + tropasApoioDentro.length
+    const totalMovimentos = ataquesSaindo.length + apoiosSaindo.length + mercadoresSaindo.length + ataquesChegando.length + apoiosChegandoMov.length + mercadoresChegando.length + retornosChegando.length + mercadoresRetornando.length + tropasApoioFora.length + tropasApoioDentro.length
     
     const [isExpanded, setIsExpanded] = useState(totalMovimentos > 0)
 
@@ -35,7 +39,7 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
     const chamarDeVolta = async (supportId: string) => {
         setCarregando(true)
         try {
-            await api.post('/village/support/recall', { supportId }, token)
+            await api.post('/village/support/recall', { supportId }, token || undefined)
             adicionarNotificacao('Tropas chamadas de volta!', 'sucesso')
             aoAtualizar()
         } catch (erro: any) {
@@ -48,7 +52,7 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
     const devolverApoio = async (supportId: string) => {
         setCarregando(true)
         try {
-            await api.post('/village/support/send-back', { supportId }, token)
+            await api.post('/village/support/send-back', { supportId }, token || undefined)
             adicionarNotificacao('Tropas devolvidas!', 'sucesso')
             aoAtualizar()
         } catch (erro: any) {
@@ -61,17 +65,16 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
     return (
         <section className="painelSecao" style={{ gridColumn: '1 / -1' }}>
             <div 
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
                 onClick={() => setIsExpanded(!isExpanded)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+                className="painelMovimentos_header"
                 style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between', 
-                    cursor: 'pointer',
-                    userSelect: 'none',
                     paddingBottom: isExpanded ? '10px' : '0px',
                     borderBottom: isExpanded ? '1px solid #334155' : 'none',
-                    marginBottom: isExpanded ? '10px' : '0px',
-                    transition: 'all 0.3s ease'
+                    marginBottom: isExpanded ? '10px' : '0px'
                 }}
             >
                 <h2 className="telaGeral_titulo" style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>
@@ -81,12 +84,12 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {!isExpanded && ataquesChegando.length > 0 && (
                         <span style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', animation: 'pulse 2s infinite' }}>
-                            🚨 {ataquesChegando.length} Ataque{ataquesChegando.length > 1 ? 's' : ''}
+                            <span aria-hidden="true">🚨</span> {ataquesChegando.length} Ataque{ataquesChegando.length > 1 ? 's' : ''}
                         </span>
                     )}
                     {!isExpanded && totalMovimentos > 0 && ataquesChegando.length === 0 && (
                         <span style={{ background: '#475569', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem' }}>
-                            📦 {totalMovimentos} Ativo{totalMovimentos > 1 ? 's' : ''}
+                            <span aria-hidden="true">📦</span> {totalMovimentos} Ativo{totalMovimentos > 1 ? 's' : ''}
                         </span>
                     )}
                     
@@ -114,17 +117,17 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                             </div>
                         )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div className="gradePaineis">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     {/* COMANDOS RECEBIDOS */}
-                    {(ataquesChegando.length > 0 || apoiosChegandoMov.length > 0 || retornosChegando.length > 0) && (
+                    {(ataquesChegando.length > 0 || apoiosChegandoMov.length > 0 || retornosChegando.length > 0 || mercadoresChegando.length > 0 || mercadoresRetornando.length > 0) && (
                         <div>
                             <h3 style={{ color: '#f87171', borderBottom: '1px solid #475569', paddingBottom: '5px' }}>Comandos Recebidos</h3>
                             
                             {ataquesChegando.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(220, 38, 38, 0.2)', border: '1px solid #dc2626', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#fca5a5', fontWeight: 'bold' }}>
-                                        ⚔️ Ataque INIMIGO de {m.origin?.user?.username || 'Bárbaros'}
+                                        <span aria-hidden="true">⚔️</span> Ataque INIMIGO de {m.origin?.user?.username || 'Bárbaros'}
                                     </div>
                                     <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
                                         Vindo de {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
@@ -138,7 +141,7 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                             {apoiosChegandoMov.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#93c5fd', fontWeight: 'bold' }}>
-                                        🛡️ Apoio ALIADO de {m.origin?.user?.username || 'Desconhecido'}
+                                        <span aria-hidden="true">🛡️</span> Apoio ALIADO de {m.origin?.user?.username || 'Desconhecido'}
                                     </div>
                                     <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
                                         Vindo de {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
@@ -152,7 +155,45 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                             {retornosChegando.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid #eab308', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#fde047', fontWeight: 'bold' }}>
-                                        📦 Retorno de Tropas
+                                        <span aria-hidden="true">📦</span> Retorno de Tropas
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '5px' }}>
+                                        Voltando de {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#94a3b8', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {m.spear > 0 && <span>Lança: {m.spear}</span>}
+                                        {m.sword > 0 && <span>Espada: {m.sword}</span>}
+                                        {m.axe > 0 && <span>Bárbaro: {m.axe}</span>}
+                                        {(m.wood > 0 || m.clay > 0 || m.iron > 0) && (
+                                            <span style={{ color: '#fbbf24', marginLeft: 'auto' }}>
+                                                Saque: {m.wood} Mad | {m.clay} Arg | {m.iron} Fer
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
+                                        <ContadorTempo endTime={m.arrivalTime} />
+                                    </div>
+                                </div>
+                            ))}
+
+                            {mercadoresChegando.map((m: any) => (
+                                <div key={m.id} style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
+                                    <div style={{ color: '#34d399', fontWeight: 'bold' }}>
+                                        <span aria-hidden="true">🛒</span> Recebendo Recursos
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                                        Vindo de {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
+                                    </div>
+                                    <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
+                                        <ContadorTempo endTime={m.arrivalTime} />
+                                    </div>
+                                </div>
+                            ))}
+
+                            {mercadoresRetornando.map((m: any) => (
+                                <div key={m.id} style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
+                                    <div style={{ color: '#34d399', fontWeight: 'bold' }}>
+                                        <span aria-hidden="true">🛒</span> Mercadores Retornando
                                     </div>
                                     <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
                                         Voltando de {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
@@ -166,17 +207,22 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                     )}
 
                     {/* COMANDOS ENVIADOS */}
-                    {(ataquesSaindo.length > 0 || apoiosSaindo.length > 0) && (
+                    {(ataquesSaindo.length > 0 || apoiosSaindo.length > 0 || mercadoresSaindo.length > 0) && (
                         <div>
                             <h3 style={{ color: '#94a3b8', borderBottom: '1px solid #475569', paddingBottom: '5px' }}>Comandos Enviados</h3>
                             
                             {ataquesSaindo.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(249, 115, 22, 0.1)', border: '1px solid #f97316', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#fdba74', fontWeight: 'bold' }}>
-                                        ⚔️ Atacando {m.target?.user?.username || 'Bárbaros'}
+                                        <span aria-hidden="true">⚔️</span> Atacando {m.target?.user?.username || 'Bárbaros'}
                                     </div>
-                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '5px' }}>
                                         Alvo: {m.target?.name} ({m.target?.x}|{m.target?.y})
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#94a3b8', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {m.spear > 0 && <span>Lança: {m.spear}</span>}
+                                        {m.sword > 0 && <span>Espada: {m.sword}</span>}
+                                        {m.axe > 0 && <span>Bárbaro: {m.axe}</span>}
                                     </div>
                                     <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
                                         <ContadorTempo endTime={m.arrivalTime} />
@@ -187,7 +233,26 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                             {apoiosSaindo.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(14, 165, 233, 0.1)', border: '1px solid #0ea5e9', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#7dd3fc', fontWeight: 'bold' }}>
-                                        🛡️ Apoiando {m.target?.user?.username || 'Desconhecido'}
+                                        <span aria-hidden="true">🛡️</span> Apoiando {m.target?.user?.username || 'Desconhecido'}
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '5px' }}>
+                                        Alvo: {m.target?.name} ({m.target?.x}|{m.target?.y})
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#94a3b8', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {m.spear > 0 && <span>Lança: {m.spear}</span>}
+                                        {m.sword > 0 && <span>Espada: {m.sword}</span>}
+                                        {m.axe > 0 && <span>Bárbaro: {m.axe}</span>}
+                                    </div>
+                                    <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
+                                        <ContadorTempo endTime={m.arrivalTime} />
+                                    </div>
+                                </div>
+                            ))}
+
+                            {mercadoresSaindo.map((m: any) => (
+                                <div key={m.id} style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
+                                    <div style={{ color: '#34d399', fontWeight: 'bold' }}>
+                                        <span aria-hidden="true">🛒</span> Enviando Recursos
                                     </div>
                                     <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
                                         Alvo: {m.target?.name} ({m.target?.x}|{m.target?.y})
@@ -200,7 +265,7 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                         </div>
                     )}
 
-                    {ataquesSaindo.length === 0 && apoiosSaindo.length === 0 && retornosChegando.length === 0 && ataquesChegando.length === 0 && apoiosChegandoMov.length === 0 && (
+                    {ataquesSaindo.length === 0 && apoiosSaindo.length === 0 && mercadoresSaindo.length === 0 && retornosChegando.length === 0 && ataquesChegando.length === 0 && apoiosChegandoMov.length === 0 && mercadoresChegando.length === 0 && mercadoresRetornando.length === 0 && (
                         <div>
                             <h3 style={{ color: '#94a3b8', borderBottom: '1px solid #475569', paddingBottom: '5px' }}>Comandos</h3>
                             <p style={{ color: '#64748b', marginTop: '10px' }}>Nenhum movimento ativo.</p>

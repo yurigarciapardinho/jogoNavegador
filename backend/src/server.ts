@@ -31,6 +31,7 @@ if (!conselheiroUrl) {
 import fastifyJwt from '@fastify/jwt'
 import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
+import questRoutes from './routes/quests'
 
 declare module 'fastify' {
     export interface FastifyInstance {
@@ -105,6 +106,7 @@ fastify.decorate('authenticate', async (request: any, reply: any) => {
 
 fastify.register(authRoutes, { prisma })
 fastify.register(adminRoutes, { prisma })
+fastify.register(questRoutes, { prisma })
 
 fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string, username: string, role?: string }
@@ -133,6 +135,106 @@ fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (re
         isDefeated: dbUser?.isDefeated || false,
         serverSpeed: config?.speedMultiplier || 1.0
     }
+})
+
+fastify.post('/village/:id/market/send', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string }
+    const { id } = request.params as { id: string }
+    const { targetId, wood, clay, iron } = request.body as { targetId: string, wood: number, clay: number, iron: number }
+
+    if (!targetId || targetId === id) {
+        return reply.code(400).send({ error: 'Destino inválido.' })
+    }
+
+    const sendWood = Math.max(0, parseInt(wood as any) || 0)
+    const sendClay = Math.max(0, parseInt(clay as any) || 0)
+    const sendIron = Math.max(0, parseInt(iron as any) || 0)
+    const totalAmount = sendWood + sendClay + sendIron
+
+    if (totalAmount <= 0) {
+        return reply.code(400).send({ error: 'Você deve enviar pelo menos um recurso.' })
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+        const origin = await tx.village.findFirst({
+            where: { id, userId: user.id },
+            include: { resources: true, buildings: true }
+        })
+
+        if (!origin || !origin.resources || !origin.buildings) {
+            throw new Error('NOT_FOUND_OR_NOT_OWNER')
+        }
+
+        const target = await tx.village.findUnique({ where: { id: targetId } })
+        if (!target) {
+            throw new Error('TARGET_NOT_FOUND')
+        }
+
+        const marketLevel = (origin.buildings as any).market || 0
+        if (marketLevel <= 0) {
+            throw new Error('NO_MARKET')
+        }
+
+        const { getMarketCapacity } = require('./gameLogic/economy')
+        const totalCapacity = getMarketCapacity(marketLevel)
+        
+        // Calcular mercadores em trânsito (ida e volta)
+        const pendingTransports = await tx.movement.findMany({
+            where: { originId: id, type: 'TRANSPORT', completed: false }
+        })
+        const pendingReturns = await tx.movement.findMany({
+            where: { targetId: id, type: 'TRANSPORT_RETURN', completed: false }
+        })
+        
+        const inTransitOut = pendingTransports.reduce((sum: number, t: any) => sum + (t.wood || 0) + (t.clay || 0) + (t.iron || 0), 0)
+        const inTransitReturn = pendingReturns.reduce((sum: number, t: any) => sum + (t.wood || 0) + (t.clay || 0) + (t.iron || 0), 0)
+        const inTransitAmount = inTransitOut + inTransitReturn
+        
+        const availableCapacity = totalCapacity - inTransitAmount
+
+        if (totalAmount > availableCapacity) {
+            throw new Error('INSUFFICIENT_MERCHANTS')
+        }
+
+        if (origin.resources.wood < sendWood || origin.resources.clay < sendClay || origin.resources.iron < sendIron) {
+            throw new Error('INSUFFICIENT_RESOURCES')
+        }
+
+        // Deduct resources
+        await tx.villageResource.update({
+            where: { villageId: id },
+            data: {
+                wood: { decrement: sendWood },
+                clay: { decrement: sendClay },
+                iron: { decrement: sendIron }
+            }
+        })
+
+        // Calcular tempo (simulando que mercadores andam a 6 minutos por bloco - 360s)
+        const dist = Math.sqrt(Math.pow(origin.x - target.x, 2) + Math.pow(origin.y - target.y, 2))
+        const serverConfig = await tx.serverConfig.findFirst()
+        const speed = serverConfig?.speedMultiplier || 1.0
+        
+        const timeSec = Math.max(10, Math.floor((dist * 360) / speed))
+        const arrivalTime = new Date(Date.now() + timeSec * 1000)
+
+        const movement = await tx.movement.create({
+            data: {
+                type: 'TRANSPORT',
+                originId: id,
+                targetId: targetId,
+                wood: sendWood,
+                clay: sendClay,
+                iron: sendIron,
+                arrivalTime,
+                completed: false
+            }
+        })
+
+        return movement
+    })
+
+    return result
 })
 
 fastify.post('/me/restart', { preValidation: [fastify.authenticate] }, async (request, reply) => {
@@ -291,12 +393,26 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
     const stats = getUnitStats(unitType)
     if (!stats) return reply.code(400).send({ error: 'Unidade inválida.' })
 
+    if ((village.buildings.barracks || 0) < 1) {
+        return reply.code(400).send({ error: 'Quartel não construído.' })
+    }
+
     try {
         await prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT id FROM "Village" WHERE id = ${villageId} FOR UPDATE`
 
             const agora = new Date()
             await atualizarEstadoAldeia(tx, villageId, agora)
+
+            const { getFarmCapacity, getTotalUsedPopulation } = require('./gameLogic/economy')
+            const maxPop = getFarmCapacity(village.buildings.farm || 0)
+            
+            const currentPop = await getTotalUsedPopulation(tx, villageId)
+            const requestedPop = amount * (stats.population || 1)
+            
+            if (currentPop + requestedPop > maxPop) {
+                throw new Error('INSUFFICIENT_POPULATION')
+            }
 
             const cost = {
                 wood: stats.cost.wood * amount,
@@ -351,6 +467,9 @@ fastify.post('/village/recruit', { preValidation: [fastify.authenticate] }, asyn
         if (erro.message === 'INSUFFICIENT_RESOURCES') {
             return reply.code(400).send({ error: 'Recursos insuficientes. Você não possui os materiais ou houve alteração concorrente.' })
         }
+        if (erro.message === 'INSUFFICIENT_POPULATION') {
+            return reply.code(400).send({ error: 'População insuficiente. Evolua sua Fazenda.' })
+        }
         throw erro
     }
 
@@ -362,6 +481,10 @@ fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async
     const user = request.user as { id: string }
     const body = request.body as any
     const { originId, targetId } = body
+
+    if (originId === targetId) {
+        return reply.code(400).send({ error: 'Comando inválido: A aldeia de origem e destino não podem ser a mesma.' })
+    }
 
     // Sanitização de entradas numéricas
     const spear = Math.max(0, Math.floor(Number(body.spear) || 0))
@@ -455,6 +578,10 @@ fastify.post('/village/support', { preValidation: [fastify.authenticate] }, asyn
     const user = request.user as { id: string }
     const body = request.body as any
     const { originId, targetId } = body
+
+    if (originId === targetId) {
+        return reply.code(400).send({ error: 'Comando inválido: A aldeia de origem e destino não podem ser a mesma.' })
+    }
 
     const spear = Math.max(0, Math.floor(Number(body.spear) || 0))
     const sword = Math.max(0, Math.floor(Number(body.sword) || 0))
@@ -612,14 +739,35 @@ fastify.get('/reports', { preValidation: [fastify.authenticate] }, async (reques
         },
         orderBy: { createdAt: 'desc' }
     })
-    return reports
+    
+    const safeReports = reports.map((report: any) => {
+        if (report.attackerId === user.id && report.result === 'DEFENDER_WON') {
+            return {
+                ...report,
+                defSpear: -1,
+                defSword: -1,
+                defAxe: -1,
+                defLostSpear: -1,
+                defLostSword: -1,
+                defLostAxe: -1
+            }
+        }
+        return report
+    })
+
+    return safeReports
 })
 
-import { getBuildingCost } from './gameLogic/economy'
+import { getBuildingCost, getMarketCapacity } from './gameLogic/economy'
 
 fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async (request, reply) => {
     const user = request.user as { id: string }
     const { villageId, buildingType } = request.body as { villageId: string, buildingType: string }
+
+    const BUILDINGS_VALIDOS = ['headquarters', 'timberCamp', 'clayPit', 'ironMine', 'farm', 'warehouse', 'barracks', 'market', 'wall', 'church']
+    if (!BUILDINGS_VALIDOS.includes(buildingType)) {
+        return reply.code(400).send({ error: 'Edifício inválido.' })
+    }
 
     const village = await prisma.village.findFirst({
         where: { id: villageId, userId: user.id },
@@ -637,6 +785,8 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
             const agora = new Date()
             await atualizarEstadoAldeia(tx, villageId, agora)
 
+            const { getFarmCapacity, MAX_LEVELS, getBuildingPopCost, getTotalUsedPopulation } = require('./gameLogic/economy')
+
             const activeBuilds = await tx.buildingQueue.findMany({
                 where: { villageId, buildingType, completed: false }
             })
@@ -647,6 +797,20 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
             
             const currentLevel = currentBldgs ? (currentBldgs as any)[buildingType] || 0 : 0
             const newLevel = currentLevel + activeBuilds.length + 1
+            
+            if (newLevel > (MAX_LEVELS[buildingType] || 25)) {
+                throw new Error('MAX_LEVEL')
+            }
+            
+            const maxPop = getFarmCapacity(currentBldgs ? (currentBldgs as any).farm || 0 : 0)
+            const popIncrease = getBuildingPopCost(buildingType, newLevel) - getBuildingPopCost(buildingType, newLevel - 1)
+            
+            if (popIncrease > 0) {
+                const currentPop = await getTotalUsedPopulation(tx, villageId)
+                if (currentPop + popIncrease > maxPop) {
+                    throw new Error('INSUFFICIENT_POPULATION')
+                }
+            }
 
             const cost = getBuildingCost(buildingType, newLevel)
 
@@ -696,6 +860,12 @@ fastify.post('/village/build', { preValidation: [fastify.authenticate] }, async 
     } catch (erro: any) {
         if (erro.message === 'INSUFFICIENT_RESOURCES') {
             return reply.code(400).send({ error: 'Recursos insuficientes. Tentativa de concorrência detectada.' })
+        }
+        if (erro.message === 'MAX_LEVEL') {
+            return reply.code(400).send({ error: 'Nível máximo atingido.' })
+        }
+        if (erro.message === 'INSUFFICIENT_POPULATION') {
+            return reply.code(400).send({ error: 'População insuficiente para construir. Evolua sua Fazenda.' })
         }
         fastify.log.error({ erro }, 'Erro ao iniciar construção')
         return reply.code(500).send({ error: erro.message || 'Erro ao iniciar construção' })

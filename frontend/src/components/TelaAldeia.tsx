@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 import ContadorTempo from './ContadorTempo'
 import PainelMovimentos from './PainelMovimentos'
-import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso, obterCapacidadeArmazem } from '../constantes/constantesJogo'
+import { PainelMissoes } from './PainelMissoes'
+import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso, obterCapacidadeArmazem, obterCapacidadeFazenda, PROPRIEDADES_UNIDADES, MAX_LEVELS, getBuildingPopCost } from '../constantes/constantesJogo'
 import { api } from '../api'
 
 export default function TelaAldeia() {
@@ -10,6 +11,51 @@ export default function TelaAldeia() {
     const [erroBusca, definirErroBusca] = useState('')
     const [carregandoConstrucao, definirCarregandoConstrucao] = useState(false)
     const [quantidadesRecrutamento, definirQuantidadesRecrutamento] = useState<Record<string, number>>({ spear: 0, sword: 0, axe: 0 })
+
+    const calcularPopulacaoAtual = () => {
+        if (!dadosAldeia) return 0;
+        let pop = 0;
+        const addUnidades = (spear = 0, sword = 0, axe = 0) => {
+            pop += (spear * (PROPRIEDADES_UNIDADES.spear?.populacao || 1));
+            pop += (sword * (PROPRIEDADES_UNIDADES.sword?.populacao || 1));
+            pop += (axe * (PROPRIEDADES_UNIDADES.axe?.populacao || 1));
+        };
+
+        const BUILDINGS_VALIDOS = ['headquarters', 'timberCamp', 'clayPit', 'ironMine', 'farm', 'warehouse', 'barracks', 'market', 'wall', 'church']
+        if (dadosAldeia.buildings) {
+            BUILDINGS_VALIDOS.forEach(bType => {
+                pop += getBuildingPopCost(bType, dadosAldeia.buildings[bType] || 0)
+            })
+        }
+        
+        const nextLevels: Record<string, number> = {}
+        if (dadosAldeia.buildings) {
+            BUILDINGS_VALIDOS.forEach(bType => nextLevels[bType] = dadosAldeia.buildings[bType] || 0)
+        }
+        
+        filaAtiva.forEach(q => {
+            const prevLvl = nextLevels[q.buildingType] || 0
+            const targetLvl = q.targetLevel
+            pop += getBuildingPopCost(q.buildingType, targetLvl) - getBuildingPopCost(q.buildingType, prevLvl)
+            nextLevels[q.buildingType] = targetLvl
+        })
+
+        if (dadosAldeia.units) {
+            addUnidades(dadosAldeia.units.spear, dadosAldeia.units.sword, dadosAldeia.units.axe);
+        }
+        
+        filaUnidadesAtiva.forEach(q => {
+            const props = PROPRIEDADES_UNIDADES[q.unitType];
+            if (props) {
+                pop += q.amount * (props.populacao || 1);
+            }
+        });
+        
+        dadosAldeia.movementsOrigin?.forEach((m: any) => addUnidades(m.spear, m.sword, m.axe));
+        dadosAldeia.supportingSent?.forEach((s: any) => addUnidades(s.spear, s.sword, s.axe));
+
+        return pop;
+    };
 
     const buscarAldeia = async () => {
         try {
@@ -26,7 +72,7 @@ export default function TelaAldeia() {
     }, [])
 
     const evoluirConstrucao = async (tipoEdificio: string) => {
-        if (!dadosAldeia) return
+        if (!dadosAldeia || carregandoConstrucao) return
         definirCarregandoConstrucao(true)
         try {
             await api.post('/village/build', { villageId: dadosAldeia.id, buildingType: tipoEdificio }, token)
@@ -70,8 +116,12 @@ export default function TelaAldeia() {
         const totalFerro = propriedades.ferro * quantidadeParaRecrutar
         const totalTempo = Math.floor(propriedades.tempoSegundos * fatorTempo * quantidadeParaRecrutar)
         
+        const popAtual = calcularPopulacaoAtual()
+        const maxPop = obterCapacidadeFazenda(dadosAldeia?.buildings?.farm || 1)
+        const popSuficiente = (popAtual + (quantidadeParaRecrutar * (propriedades.populacao || 1))) <= maxPop
+
         const podePagar = recursos.madeira >= totalMadeira && recursos.argila >= totalArgila && recursos.ferro >= totalFerro
-        const estaValido = quantidadeParaRecrutar > 0 && podePagar && !carregandoConstrucao
+        const estaValido = quantidadeParaRecrutar > 0 && podePagar && popSuficiente && !carregandoConstrucao
         
         const estaNafila = filaUnidadesAtiva.find(q => q.unitType === tipo)
 
@@ -100,24 +150,28 @@ export default function TelaAldeia() {
                             value={quantidadeParaRecrutar || ''} 
                             onChange={(e) => definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipo]: parseInt(e.target.value) || 0 })}
                             className="campoEntrada"
-                            style={{ width: '80px' }}
+                            style={{ width: '80px', opacity: nivelQuartel === 0 ? 0.5 : 1 }}
                             placeholder="0"
+                            disabled={nivelQuartel === 0}
+                            aria-label={`Quantidade de ${propriedades.nome} para treinar`}
                         />
                         <div className="cartaoItem_detalhe" style={{ flex: 1, marginLeft: 'var(--espacamentoPequeno)' }}>
                             {quantidadeParaRecrutar > 0 && (
-                                <>
-                                    Custo: {totalMadeira} <span style={{ color: '#d97706' }}>Mad</span> | {totalArgila} <span style={{ color: '#ea580c' }}>Arg</span> | {totalFerro} <span style={{ color: '#94a3b8' }}>Fer</span>
-                                    <br/>
-                                    Tempo: {totalTempo}s
-                                </>
+                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span title="Madeira"><span aria-hidden="true" style={{ color: '#d97706' }}>🪵</span> {totalMadeira}</span>
+                                    <span title="Argila"><span aria-hidden="true" style={{ color: '#ea580c' }}>🧱</span> {totalArgila}</span>
+                                    <span title="Ferro"><span aria-hidden="true" style={{ color: '#94a3b8' }}>⚒️</span> {totalFerro}</span>
+                                    <span title="População"><span aria-hidden="true">👨‍🌾</span> {quantidadeParaRecrutar * (propriedades.populacao || 1)}</span>
+                                    <span title="Tempo"><span aria-hidden="true">⏱️</span> {totalTempo}s</span>
+                                </div>
                             )}
                         </div>
                         <button 
                             onClick={() => recrutarTropa(tipo)}
-                            disabled={!estaValido}
-                            className={`botaoGeral ${estaValido ? 'botaoGeral--primario' : 'botaoGeral--secundario'}`}
+                            disabled={!estaValido || nivelQuartel === 0}
+                            className={`botaoGeral ${estaValido && nivelQuartel > 0 ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
                         >
-                            Recrutar
+                            {nivelQuartel === 0 ? <><span aria-hidden="true">🔒</span> Bloqueado</> : 'Treinar'}
                         </button>
                     </div>
                 )}
@@ -136,12 +190,23 @@ export default function TelaAldeia() {
         const proximoNivel = estaNafila ? itemNaFila.targetLevel : nivel + 1
         const custo = obterCustoEdificio(tipo, proximoNivel)
         
+        const maxLevel = MAX_LEVELS[tipo] || 25
+        const atingiuMaximo = nivel >= maxLevel
+        
+        const popCusto = getBuildingPopCost(tipo, proximoNivel) - getBuildingPopCost(tipo, proximoNivel - 1)
+        
         let desativado = carregandoConstrucao
         
-        if (estaNafila) {
+        if (estaNafila || atingiuMaximo) {
             desativado = true
         } else if (recursos.madeira < custo.madeira || recursos.argila < custo.argila || recursos.ferro < custo.ferro) {
             desativado = true
+        } else if (popCusto > 0) {
+            const maxPop = obterCapacidadeFazenda(dadosAldeia?.buildings?.farm || 1)
+            const popAtualGlobal = calcularPopulacaoAtual()
+            if (popAtualGlobal + popCusto > maxPop) {
+                desativado = true
+            }
         }
 
         let detalheRendimento = null
@@ -172,6 +237,53 @@ export default function TelaAldeia() {
                     {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>{capProx}</span></span>}
                 </p>
             )
+        } else if (tipo === 'farm') {
+            const popAtual = obterCapacidadeFazenda(nivel)
+            const popProx = obterCapacidadeFazenda(proximoNivel)
+            detalheRendimento = (
+                <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                    População Máx: <span style={{ color: corDestaque, fontWeight: 'bold' }}>{popAtual}</span> 
+                    {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>{popProx}</span></span>}
+                </p>
+            )
+        } else if (tipo === 'barracks') {
+            if (nivel === 0) {
+                detalheRendimento = (
+                    <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                        <span style={{ color: '#ef4444', fontWeight: 'bold' }}><span aria-hidden="true">🔒</span> Não construído</span>
+                        {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>100% (Vel. Base)</span></span>}
+                    </p>
+                )
+            } else {
+                const fatAtual = Math.round(Math.pow(0.95, Math.max(0, nivel - 1)) * 100)
+                const fatProx = Math.round(Math.pow(0.95, Math.max(0, proximoNivel - 1)) * 100)
+                detalheRendimento = (
+                    <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                        Tempo de Treino: <span style={{ color: corDestaque, fontWeight: 'bold' }}>{fatAtual}%</span> 
+                        {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>{fatProx}%</span></span>}
+                    </p>
+                )
+            }
+        } else if (tipo === 'wall') {
+            const defPercAtual = nivel * 5
+            const defBaseAtual = nivel * 50
+            const defPercProx = proximoNivel * 5
+            const defBaseProx = proximoNivel * 50
+            detalheRendimento = (
+                <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                    Bônus Defesa: <span style={{ color: corDestaque, fontWeight: 'bold' }}>+{defPercAtual}%</span> (+{defBaseAtual} fixo)
+                    {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>+{defPercProx}%</span> (+{defBaseProx} fixo)</span>}
+                </p>
+            )
+        } else if (tipo === 'market') {
+            const mercadoresAtual = Math.floor(Math.pow(1.15, Math.max(0, nivel - 1)) * nivel)
+            const mercadoresProx = Math.floor(Math.pow(1.15, Math.max(0, proximoNivel - 1)) * proximoNivel)
+            detalheRendimento = (
+                <p className="cartaoItem_detalhe" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'var(--corTextoSecundario)' }}>
+                    Mercadores: <span style={{ color: corDestaque, fontWeight: 'bold' }}>{mercadoresAtual}</span> (Capacidade: {mercadoresAtual * 1000})
+                    {!estaNafila && <span> ➔ <span style={{ color: 'var(--corSucesso)', fontWeight: 'bold' }}>{mercadoresProx}</span></span>}
+                </p>
+            )
         }
 
         return (
@@ -184,20 +296,29 @@ export default function TelaAldeia() {
                         
                         {detalheRendimento}
 
-                        {!estaNafila && (
-                            <p className="cartaoItem_detalhe" style={{ marginTop: '4px' }}>
-                                Custo: {custo.madeira} <span style={{ color: '#d97706' }}>Mad</span> | {custo.argila} <span style={{ color: '#ea580c' }}>Arg</span> | {custo.ferro} <span style={{ color: '#94a3b8' }}>Fer</span>
-                            </p>
+                        {!estaNafila && !atingiuMaximo && (
+                            <div className="cartaoItem_detalhe" style={{ marginTop: '8px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                <span title="Madeira"><span aria-hidden="true" style={{ color: '#d97706' }}>🪵</span> {custo.madeira}</span>
+                                <span title="Argila"><span aria-hidden="true" style={{ color: '#ea580c' }}>🧱</span> {custo.argila}</span>
+                                <span title="Ferro"><span aria-hidden="true" style={{ color: '#94a3b8' }}>⚒️</span> {custo.ferro}</span>
+                                {popCusto > 0 && <span title="População"><span aria-hidden="true">👨‍🌾</span> {popCusto}</span>}
+                            </div>
                         )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                        <button 
-                            onClick={() => evoluirConstrucao(tipo)}
-                            disabled={desativado}
-                            className={`botaoGeral ${!desativado && !estaNafila ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
-                        >
-                            {estaNafila ? (indexGlobalNaFila === 0 ? 'Construindo...' : 'Na Fila') : `Evoluir (${custo.tempoSegundos}s)`}
-                        </button>
+                        {atingiuMaximo ? (
+                            <div style={{ padding: '8px 16px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.9rem', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                                Nível Máximo
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => evoluirConstrucao(tipo)}
+                                disabled={desativado}
+                                className={`botaoGeral ${!desativado && !estaNafila ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
+                            >
+                                {estaNafila ? (indexGlobalNaFila === 0 ? 'Construindo...' : 'Na Fila') : `Evoluir (${custo.tempoSegundos}s)`}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -228,6 +349,10 @@ export default function TelaAldeia() {
                 const madeiraLotada = recursos.madeira >= capacidadeArmazem
                 const argilaLotada = recursos.argila >= capacidadeArmazem
                 const ferroLotado = recursos.ferro >= capacidadeArmazem
+                
+                const popAtual = calcularPopulacaoAtual()
+                const maxPop = dadosAldeia?.buildings ? obterCapacidadeFazenda(dadosAldeia.buildings.farm || 1) : 240
+                const popLotada = popAtual >= maxPop
 
                 return (
                     <header className="painelRecursos">
@@ -240,11 +365,15 @@ export default function TelaAldeia() {
                         <div className="recursoItem" style={{ color: ferroLotado ? '#ef4444' : '#94a3b8', fontWeight: ferroLotado ? 'bold' : 'normal' }}>
                             Ferro: {Math.floor(recursos.ferro)} / {capacidadeArmazem} {ferroLotado && '⚠️'}
                         </div>
+                        <div className="recursoItem" style={{ color: popLotada ? '#ef4444' : '#10b981', fontWeight: popLotada ? 'bold' : 'normal' }}>
+                            Pop: {popAtual} / {maxPop} {popLotada && '⚠️'}
+                        </div>
                     </header>
                 )
             })()}
 
             <main className="gradePaineis">
+                <PainelMissoes aoAtualizar={buscarAldeia} />
                 <PainelMovimentos dadosAldeia={dadosAldeia} aoAtualizar={buscarAldeia} />
 
                 <section className="painelSecao">
@@ -253,13 +382,13 @@ export default function TelaAldeia() {
                     {filaAtiva.length > 0 && (
                         <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', borderLeft: '4px solid var(--corPrimaria)' }}>
                             <h3 style={{ fontSize: '1rem', marginBottom: '8px', color: 'var(--corPrimariaHover)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🛠️ Fila de Construções
+                                <span aria-hidden="true">🛠️</span> Fila de Construções
                             </h3>
                             {filaAtiva.map((item, i) => (
                                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < filaAtiva.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                                     <span style={{ fontSize: '0.9rem', color: i === 0 ? '#fff' : 'var(--corTextoSecundario)' }}>
                                         <span style={{ display: 'inline-block', width: '20px', textAlign: 'center', background: i === 0 ? 'var(--corPrimaria)' : 'transparent', color: i === 0 ? '#000' : 'inherit', borderRadius: '4px', marginRight: '8px' }}>{i + 1}</span>
-                                        {item.buildingType === 'timberCamp' ? 'Bosque' : item.buildingType === 'clayPit' ? 'Poço de Argila' : item.buildingType === 'ironMine' ? 'Mina de Ferro' : 'Armazém'} Nível {item.targetLevel}
+                                        {item.buildingType === 'timberCamp' ? 'Bosque' : item.buildingType === 'clayPit' ? 'Poço de Argila' : item.buildingType === 'ironMine' ? 'Mina de Ferro' : item.buildingType === 'warehouse' ? 'Armazém' : item.buildingType === 'farm' ? 'Fazenda' : item.buildingType === 'barracks' ? 'Quartel' : item.buildingType === 'market' ? 'Mercado' : item.buildingType === 'wall' ? 'Muralha' : item.buildingType === 'church' ? 'Igreja' : 'Edifício'} Nível {item.targetLevel}
                                     </span>
                                     <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: i === 0 ? 'var(--corSucesso)' : 'var(--corTextoSecundario)' }}>
                                         {i === 0 ? <ContadorTempo endTime={item.endTime} /> : 'Aguardando...'}
@@ -271,10 +400,15 @@ export default function TelaAldeia() {
 
                     {dadosAldeia?.buildings ? (
                         <div>
+                            {renderizarLinhaEdificio('headquarters', 'Sede', dadosAldeia.buildings.headquarters || 1, '#3b82f6')}
                             {renderizarLinhaEdificio('timberCamp', 'Bosque (Madeira)', dadosAldeia.buildings.timberCamp, '#d97706')}
                             {renderizarLinhaEdificio('clayPit', 'Poço de Argila', dadosAldeia.buildings.clayPit, '#ea580c')}
                             {renderizarLinhaEdificio('ironMine', 'Mina de Ferro', dadosAldeia.buildings.ironMine, '#94a3b8')}
                             {renderizarLinhaEdificio('warehouse', 'Armazém', dadosAldeia.buildings.warehouse, '#a855f7')}
+                            {renderizarLinhaEdificio('farm', 'Fazenda', dadosAldeia.buildings.farm, '#10b981')}
+                            {renderizarLinhaEdificio('barracks', 'Quartel', dadosAldeia.buildings.barracks, '#ef4444')}
+                            {renderizarLinhaEdificio('market', 'Mercado', dadosAldeia.buildings.market || 0, '#0284c7')}
+                            {renderizarLinhaEdificio('wall', 'Muralha', dadosAldeia.buildings.wall || 0, '#64748b')}
                         </div>
                     ) : (
                         <p className="telaGeral_texto">Carregando edifícios...</p>
@@ -285,7 +419,18 @@ export default function TelaAldeia() {
                     <h2 className="telaGeral_titulo">Quartel (Tropas)</h2>
                     
                     {dadosAldeia?.units ? (
-                        <div>
+                        <div style={{ opacity: (dadosAldeia.buildings?.barracks || 0) === 0 ? 0.5 : 1, position: 'relative' }}>
+                            {(dadosAldeia.buildings?.barracks || 0) === 0 && (
+                                <div style={{
+                                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    background: 'rgba(0,0,0,0.6)', borderRadius: '8px'
+                                }}>
+                                    <div style={{ background: 'rgba(234, 179, 8, 0.9)', color: '#000', padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                                        <span aria-hidden="true">🔒</span> Quartel não construído. Evolua na Sede para o Nível 1.
+                                    </div>
+                                </div>
+                            )}
                             {renderizarLinhaUnidade('spear')}
                             {renderizarLinhaUnidade('sword')}
                             {renderizarLinhaUnidade('axe')}

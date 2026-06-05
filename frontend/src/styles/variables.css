@@ -17,10 +17,10 @@
   --corPerigo: #dc2626; /* red-600 */
   --corPerigoHover: #b91c1c; /* red-700 */
   
-  /* Medidas de UI */
-  --espacamentoPequeno: 8px;
-  --espacamentoMedio: 16px;
-  --espacamentoGrande: 32px;
+  /* Medidas de UI (Fluidas usando Clamp para proteção Mobile/PC) */
+  --espacamentoPequeno: clamp(4px, 1vw, 8px);
+  --espacamentoMedio: clamp(12px, 2vw, 16px);
+  --espacamentoGrande: clamp(20px, 3.5vw, 32px);
   --bordaArredondada: 8px;
   
   /* Configurações do Jogo */

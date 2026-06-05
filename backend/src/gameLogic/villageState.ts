@@ -124,7 +124,7 @@ export async function atualizarEstadoAldeia(tx: any, villageId: string, agora: D
             }
         }
 
-        const produzir = (nivel: number, mult: number) => Math.floor(300 * Math.pow(1.15, nivel)) * mult
+        const produzir = (nivel: number, mult: number) => Math.floor(300 * Math.pow(1.16, nivel)) * mult
 
         const novaMadeiraSemLimite = village.resources.wood + (produzir(village.buildings.timberCamp, woodMultiplier) * horasPassadas)
         const novaArgilaSemLimite  = village.resources.clay  + (produzir(village.buildings.clayPit, clayMultiplier) * horasPassadas)

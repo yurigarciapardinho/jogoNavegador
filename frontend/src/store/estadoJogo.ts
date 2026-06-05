@@ -43,6 +43,9 @@ interface EstadoJogo {
     activeMultipliers: { wood: number; clay: number; iron: number }
     serverSpeed: number
     sincronizarAldeiaSilenciosa: () => Promise<void>
+    userVillages: any[]
+    activeVillageId: string | null
+    trocarAldeiaAtiva: (id: string) => void
 }
 
 export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
@@ -53,13 +56,19 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
     filaUnidadesAtiva: [],
     activeMultipliers: { wood: 1.0, clay: 1.0, iron: 1.0 },
     serverSpeed: 1.0,
+    userVillages: [],
+    activeVillageId: null,
+    trocarAldeiaAtiva: (id) => {
+        set({ activeVillageId: id, dadosAldeia: null })
+        get().sincronizarAldeiaSilenciosa()
+    },
     sincronizarAldeiaSilenciosa: async () => {
         const estado = get()
         if (!estado.token) return
         try {
-            let idAldeia = estado.dadosAldeia?.id
+            let idAldeia = estado.activeVillageId || estado.dadosAldeia?.id
 
-            if (!idAldeia) {
+            if (!idAldeia || estado.userVillages.length === 0) {
                 // Primeira sincronização ou cache vazio: busca aldeias e configurações globais
                 const dadosMeResponse = await api.get('/me/villages', estado.token)
                 const { villages, globalMessage, isDefeated, serverSpeed } = dadosMeResponse
@@ -67,11 +76,15 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
                 set({ 
                     mensagemGlobal: globalMessage || null, 
                     isDefeated: isDefeated || false,
-                    serverSpeed: serverSpeed || 1.0 
+                    serverSpeed: serverSpeed || 1.0,
+                    userVillages: villages || []
                 })
                 
                 if (villages && villages.length > 0) {
-                    idAldeia = villages[0].id
+                    if (!idAldeia) {
+                        idAldeia = villages[0].id
+                        set({ activeVillageId: idAldeia })
+                    }
                 }
             }
 
@@ -80,6 +93,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
                 
                 set({
                     dadosAldeia: dados,
+                    activeVillageId: idAldeia,
                     activeMultipliers: dados.activeMultipliers || { wood: 1.0, clay: 1.0, iron: 1.0 },
                     recursos: {
                         madeira: dados.resources.wood || 0,
@@ -92,7 +106,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
             }
         } catch (erro: any) {
             // Em caso de erro (ex: aldeia deletada ou token expirado), limpa o cache para forçar a redestribuição
-            set({ dadosAldeia: null })
+            set({ dadosAldeia: null, activeVillageId: null, userVillages: [] })
         }
     },
     mensagemGlobal: null,
@@ -142,7 +156,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
     },
     realizarLogout: () => {
         localStorage.removeItem('tw2_token')
-        set({ token: null, usuario: null, dadosAldeia: null, filaAtiva: [], filaUnidadesAtiva: [] })
+        set({ token: null, usuario: null, dadosAldeia: null, filaAtiva: [], filaUnidadesAtiva: [], userVillages: [], activeVillageId: null })
     },
     isDefeated: false,
     definirDerrota: (derrotado) => set({ isDefeated: derrotado })

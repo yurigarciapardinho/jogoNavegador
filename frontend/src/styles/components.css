@@ -3,40 +3,53 @@
   padding: var(--espacamentoPequeno) var(--espacamentoMedio);
   border-radius: var(--bordaArredondada);
   font-weight: bold;
-  transition: background-color var(--velocidadeTransicao), color var(--velocidadeTransicao);
+  transition: background-color var(--velocidadeTransicao), color var(--velocidadeTransicao), transform var(--velocidadeTransicao), box-shadow var(--velocidadeTransicao);
+}
+
+.botaoGeral:focus-visible {
+  outline: 2px solid var(--corPrimaria);
+  outline-offset: 2px;
 }
 
 .botaoGeral--primario {
   background-color: var(--corPrimaria);
   color: white;
 }
-.botaoGeral--primario:hover {
-  background-color: var(--corPrimariaHover);
+@media (hover: hover) and (pointer: fine) {
+  .botaoGeral--primario:hover {
+    background-color: var(--corPrimariaHover);
+  }
 }
 
 .botaoGeral--secundario {
   background-color: var(--corBorda);
   color: var(--corTextoSecundario);
 }
-.botaoGeral--secundario:hover {
-  background-color: #475569;
-  color: white;
+@media (hover: hover) and (pointer: fine) {
+  .botaoGeral--secundario:hover {
+    background-color: #475569;
+    color: white;
+  }
 }
 
 .botaoGeral--perigo {
   background-color: var(--corPerigo);
   color: white;
 }
-.botaoGeral--perigo:hover {
-  background-color: var(--corPerigoHover);
+@media (hover: hover) and (pointer: fine) {
+  .botaoGeral--perigo:hover {
+    background-color: var(--corPerigoHover);
+  }
 }
 
 .botaoGeral--sucesso {
   background-color: var(--corSucesso);
   color: white;
 }
-.botaoGeral--sucesso:hover {
-  background-color: var(--corSucessoHover);
+@media (hover: hover) and (pointer: fine) {
+  .botaoGeral--sucesso:hover {
+    background-color: var(--corSucessoHover);
+  }
 }
 
 .botaoGeral--largo {
@@ -62,10 +75,14 @@
   border-radius: var(--bordaArredondada);
   padding: var(--espacamentoPequeno);
   color: white;
-  transition: border-color var(--velocidadeTransicao);
+  transition: border-color var(--velocidadeTransicao), box-shadow var(--velocidadeTransicao);
 }
 .campoEntrada:focus {
   border-color: var(--corPrimariaHover);
+}
+.campoEntrada:focus-visible {
+  outline: 2px solid var(--corPrimariaHover);
+  outline-offset: -1px;
 }
 
 /* Componentes do Modal de Aldeia */
@@ -200,8 +217,10 @@
   margin-bottom: var(--espacamentoPequeno);
   transition: border-color var(--velocidadeTransicao), background-color var(--velocidadeTransicao);
 }
-.itemRelatorio:hover {
-  border-color: var(--corBorda);
+@media (hover: hover) and (pointer: fine) {
+  .itemRelatorio:hover {
+    border-color: var(--corBorda);
+  }
 }
 .itemRelatorio--selecionado {
   border-color: var(--corPrimariaHover);
@@ -226,9 +245,15 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 .botaoGeral:active:not(:disabled) {
   transform: scale(0.95);
+}
+@media (hover: hover) and (pointer: fine) {
+  .botaoGeral:hover:not(:disabled) {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  }
 }
 
 /* Sistema de Notificações */
@@ -284,8 +309,10 @@
   line-height: 1;
   padding: 0 0 0 var(--espacamentoMedio);
 }
-.botaoFecharNotificacao:hover {
-  color: white;
+@media (hover: hover) and (pointer: fine) {
+  .botaoFecharNotificacao:hover {
+    color: white;
+  }
 }
 
 /* Erros de Validação em Linha */
@@ -332,8 +359,10 @@
     /* transition: none; to ensure dragging has no delay */
 }
 
-.alertaAtaqueGlobal:hover {
-    background-color: #b91c1c;
+@media (hover: hover) and (pointer: fine) {
+  .alertaAtaqueGlobal:hover {
+      background-color: #b91c1c;
+  }
 }
 
 .alertaAtaqueGlobal_icone {
@@ -375,12 +404,117 @@
     transition: background 0.2s;
 }
 
-.alertaAtaqueGlobal_fechar:hover {
-    background: rgba(0, 0, 0, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .alertaAtaqueGlobal_fechar:hover {
+      background: rgba(0, 0, 0, 0.4);
+  }
 }
 
 .pulse-anim {
     animation: pulseAtaque 2s infinite;
+}
+
+/* Widget de Missões */
+.widgetMissoes_gatilho {
+  position: fixed;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--corSucesso);
+  color: white;
+  border: none;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: var(--camadaHud);
+  transition: background-color 0.2s;
+}
+
+.widgetMissoes_gatilho:active {
+  cursor: grabbing;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .widgetMissoes_gatilho:hover {
+    background-color: var(--corSucessoHover);
+  }
+}
+
+.widgetMissoes_gatilho:focus-visible {
+  outline: 2px solid var(--corSucesso);
+  outline-offset: 4px;
+}
+
+.widgetMissoes_badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: var(--corPerigo);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 2px solid var(--corFundo);
+  animation: pulseAtaque 2s infinite;
+}
+
+.modalMissoes_overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: var(--camadaModal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modalMissoes_conteudo {
+  background-color: var(--corPainel);
+  border: 1px solid var(--corBorda);
+  border-radius: var(--bordaArredondada);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: surgirSuave 0.2s ease-out forwards;
+}
+
+.modalMissoes_cabecalho {
+  padding: var(--espacamentoMedio);
+  border-bottom: 1px solid var(--corBorda);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--corFundoEscuro);
+}
+
+.modalMissoes_corpo {
+  padding: var(--espacamentoMedio);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacamentoMedio);
+}
+
+.pillRecompensa {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
 }
 
 @keyframes pulseAtaque {
@@ -393,4 +527,27 @@
     100% {
         box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
     }
+}
+
+/* Preferência de Usuário: Movimento Reduzido */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.painelMovimentos_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--velocidadeTransicao) ease;
+}
+.painelMovimentos_header:focus-visible {
+  outline: 2px solid var(--corPrimaria);
+  outline-offset: 4px;
+  border-radius: 4px;
 }

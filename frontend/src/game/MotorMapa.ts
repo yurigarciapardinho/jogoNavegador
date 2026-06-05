@@ -10,14 +10,21 @@ export class MotorMapa {
     private containerMovimentos: Container
     private bgSprite: TilingSprite | null = null
     public estaInicializado: boolean = false
+    private _isDestroyed: boolean = false
     
     // Variáveis para panning
     private estaArrastando = false
     private inicioArrasto = { x: 0, y: 0 }
     private onError: ((mensagem: string) => void) | null
 
+    // God Mode (Admin)
+    public godModeEnabled: boolean = false
+    public onVillageMoveCb?: (villageId: string, newX: number, newY: number) => void
+    public onMapClickCb?: (x: number, y: number) => void
+
     // Chunking
-    private tamanhoBloco = 64
+    private tamanhoBloco = 96
+    public zoomLevel = 1.0
     private cameraX = 0
     private cameraY = 0
     private lastFetchTime = 0
@@ -29,7 +36,7 @@ export class MotorMapa {
     private aoClicarNaAldeiaCb?: (aldeia: any) => void
     private villageCache = new Set<string>()
     private renderizados = new Map<string, Graphics>()
-    private renderizadosMovimentos = new Map<string, { container: Container, grafLinha: Graphics, grafBola: Graphics, txtEmoji: Text }>()
+    private renderizadosMovimentos = new Map<string, { container: Container, grafLinha: Graphics, grafBola: Graphics, txtEmoji: Text, containerMarcador: Container }>()
     private movimentosAtivos: any[] = []
     private tooltipMovimento: Container | null = null
     private textTooltip: Text | null = null
@@ -135,14 +142,18 @@ export class MotorMapa {
                 container.cursor = 'pointer'
 
                 const grafLinha = new Graphics()
+                const containerMarcador = new Container()
                 const grafBola = new Graphics()
                 const txtEmoji = new Text({ text: '', style: { fontSize: 16 } })
                 
                 txtEmoji.anchor.set(0.5, 0.5)
+                txtEmoji.y = -18
+
+                containerMarcador.addChild(grafBola)
+                containerMarcador.addChild(txtEmoji)
 
                 container.addChild(grafLinha)
-                container.addChild(grafBola)
-                container.addChild(txtEmoji)
+                container.addChild(containerMarcador)
                 
                 container.on('pointerenter', () => {
                     if (this.tooltipMovimento && this.textTooltip) {
@@ -156,8 +167,12 @@ export class MotorMapa {
                         const arrivalMs = new Date(mov.arrivalTime).getTime()
                         let label = 'Ataque'
                         if (mov.type === 'SUPPORT') label = 'Apoio'
-                        if (mov.type === 'RETURN') label = 'Retorno'
+                        if (mov.type === 'RETURN') label = 'Retorno (Tropas)'
+                        if (mov.type === 'TRANSPORT') label = 'Transporte'
+                        if (mov.type === 'TRANSPORT_RETURN') label = 'Retorno (Mercadores)'
                         this.textTooltip.text = `${label}: ${this.formatarTempo(arrivalMs - Date.now())}`
+                        const bg = this.tooltipMovimento.getChildAt(0) as Graphics
+                        bg.clear().roundRect(0, 0, this.textTooltip.width + 20, 30, 5).fill({ color: 0x000000, alpha: 0.8 }).stroke({ width: 1, color: 0xffffff })
                     }
                 })
                 container.on('pointerleave', () => {
@@ -165,11 +180,50 @@ export class MotorMapa {
                 })
 
                 this.containerMovimentos.addChild(container)
+
+                const ox = mov.origin.x * this.tamanhoBloco + (this.tamanhoBloco / 2)
+                const oy = mov.origin.y * this.tamanhoBloco + (this.tamanhoBloco / 2)
+                const tx = mov.target.x * this.tamanhoBloco + (this.tamanhoBloco / 2)
+                const ty = mov.target.y * this.tamanhoBloco + (this.tamanhoBloco / 2)
+
+                let corLinha = 0xff0000 // ATAQUE
+                let emoji = '⚔️'
+                if (mov.type === 'SUPPORT') { corLinha = 0x3b82f6; emoji = '🛡️' }
+                if (mov.type === 'RETURN') { corLinha = 0xf59e0b; emoji = '🔙' }
+                if (mov.type === 'TRANSPORT') { corLinha = 0x10b981; emoji = '📦' }
+                if (mov.type === 'TRANSPORT_RETURN') { corLinha = 0x94a3b8; emoji = '🔄' }
+
+                // Desenhar Linha Tracejada (Dashed Line) matematicamente - UMA VEZ
+                const distance = Math.hypot(tx - ox, ty - oy)
+                const dashLength = 10
+                const gapLength = 10
+                let drawn = 0
                 
-                objs = { container, grafLinha, grafBola, txtEmoji }
+                while (drawn < distance) {
+                    const segStart = drawn
+                    const segEnd = Math.min(drawn + dashLength, distance)
+                    
+                    const sx = ox + (tx - ox) * (segStart / distance)
+                    const sy = oy + (ty - oy) * (segStart / distance)
+                    const ex = ox + (tx - ox) * (segEnd / distance)
+                    const ey = oy + (ty - oy) * (segEnd / distance)
+                    
+                    grafLinha.moveTo(sx, sy).lineTo(ex, ey)
+                    drawn += dashLength + gapLength
+                }
+                grafLinha.stroke({ width: 2, color: corLinha, alpha: 0.5 })
+
+                // Desenhar Bolinha de Movimento no Marcador
+                grafBola.circle(0, 0, 12).fill(corLinha).stroke({ width: 2, color: 0xffffff })
+
+                // Configurar Emoji
+                txtEmoji.text = emoji
+                
+                objs = { container, grafLinha, grafBola, txtEmoji, containerMarcador }
                 this.renderizadosMovimentos.set(mov.id, objs)
             }
 
+            // ATUALIZAÇÃO NO TICKER (FRAME-A-FRAME LEVE)
             const startMs = new Date(mov.startTime).getTime()
             const arrivalMs = new Date(mov.arrivalTime).getTime()
             
@@ -184,51 +238,24 @@ export class MotorMapa {
             const px = ox + (tx - ox) * progresso
             const py = oy + (ty - oy) * progresso
 
-            // Limpa gráficos
-            objs.grafLinha.clear()
-            objs.grafBola.clear()
-            
-            let corLinha = 0xff0000 // ATAQUE
-            let emoji = '⚔️'
-            if (mov.type === 'SUPPORT') { corLinha = 0x3b82f6; emoji = '🛡️' }
-            if (mov.type === 'RETURN') { corLinha = 0xeab308; emoji = '📦' }
-
-            // Desenhar Linha Tracejada (Dashed Line) matematicamente
-            const distance = Math.hypot(tx - ox, ty - oy)
-            const dashLength = 10
-            const gapLength = 10
-            let drawn = 0
-            
-            while (drawn < distance) {
-                const segStart = drawn
-                const segEnd = Math.min(drawn + dashLength, distance)
-                
-                const sx = ox + (tx - ox) * (segStart / distance)
-                const sy = oy + (ty - oy) * (segStart / distance)
-                const ex = ox + (tx - ox) * (segEnd / distance)
-                const ey = oy + (ty - oy) * (segEnd / distance)
-                
-                objs.grafLinha.moveTo(sx, sy).lineTo(ex, ey)
-                drawn += dashLength + gapLength
-            }
-            objs.grafLinha.stroke({ width: 2, color: corLinha, alpha: 0.5 })
-
-            // Desenhar Bolinha de Movimento
-            objs.grafBola.circle(px, py, 12).fill(corLinha).stroke({ width: 2, color: 0xffffff })
-
-            // Atualizar Emoji acima da bolinha
-            objs.txtEmoji.text = emoji
-            objs.txtEmoji.x = px
-            objs.txtEmoji.y = py - 18
+            // Apenas transladar, sem usar CPU/GPU para recalcular caminhos!
+            objs.containerMarcador.x = px
+            objs.containerMarcador.y = py
         })
     }
 
     private atualizarCamera() {
+        if (this._isDestroyed || !this.aplicativo || !this.aplicativo.screen) return
+        
+        this.containerAldeias.scale.set(this.zoomLevel)
+        this.containerMovimentos.scale.set(this.zoomLevel)
+        
         if (this.bgSprite) {
             this.bgSprite.width = this.aplicativo.screen.width
             this.bgSprite.height = this.aplicativo.screen.height
             this.bgSprite.tilePosition.x = this.cameraX
             this.bgSprite.tilePosition.y = this.cameraY
+            this.bgSprite.tileScale.set(this.zoomLevel)
         }
         this.containerAldeias.x = this.cameraX
         this.containerAldeias.y = this.cameraY
@@ -245,6 +272,8 @@ export class MotorMapa {
 
         try {
             const myVillagesReq = await api.get('/me/villages', token)
+            if (this._isDestroyed) return; // Proteção contra race condition
+
             if (myVillagesReq && myVillagesReq.villages && myVillagesReq.villages.length > 0) {
                 const minhaAldeia = myVillagesReq.villages[0]
                 this.minhaAldeiaX = minhaAldeia.x
@@ -258,23 +287,33 @@ export class MotorMapa {
         }
     }
 
+    public redefinirZoom() {
+        this.zoomLevel = 1.0;
+        this.atualizarCamera();
+    }
+
     public focarNaCoordenada(x: number, y: number) {
-        if (!this.aplicativo) return
-        this.cameraX = (this.aplicativo.screen.width / 2) - (x * this.tamanhoBloco)
-        this.cameraY = (this.aplicativo.screen.height / 2) - (y * this.tamanhoBloco)
+        if (this._isDestroyed || !this.aplicativo || !this.aplicativo.screen) return
+        this.cameraX = (this.aplicativo.screen.width / 2) - ((x * this.tamanhoBloco + (this.tamanhoBloco / 2)) * this.zoomLevel)
+        this.cameraY = (this.aplicativo.screen.height / 2) - ((y * this.tamanhoBloco + (this.tamanhoBloco / 2)) * this.zoomLevel)
         this.lastFetchTime = 0 // Força o fetch dos chunks da nova região
         this.atualizarCamera()
     }
 
+    public definirAldeiaAtiva(x: number, y: number) {
+        this.minhaAldeiaX = x;
+        this.minhaAldeiaY = y;
+    }
+
     public focarNaAldeiaAtiva() {
-        if (!this.aplicativo) return
+        if (this._isDestroyed || !this.aplicativo || !this.aplicativo.screen) return
         if (this.minhaAldeiaX === 0 && this.minhaAldeiaY === 0) {
             this.focarNaCoordenada(500, 500)
             return
         }
         
-        const alvoX = (this.aplicativo.screen.width / 2) - (this.minhaAldeiaX * this.tamanhoBloco)
-        const alvoY = (this.aplicativo.screen.height / 2) - (this.minhaAldeiaY * this.tamanhoBloco)
+        const alvoX = (this.aplicativo.screen.width / 2) - ((this.minhaAldeiaX * this.tamanhoBloco + (this.tamanhoBloco / 2)) * this.zoomLevel)
+        const alvoY = (this.aplicativo.screen.height / 2) - ((this.minhaAldeiaY * this.tamanhoBloco + (this.tamanhoBloco / 2)) * this.zoomLevel)
         
         const distancia = Math.hypot(alvoX - this.cameraX, alvoY - this.cameraY)
         
@@ -310,20 +349,22 @@ export class MotorMapa {
         this.aplicativo.ticker.add(animar)
     }
 
-    private buscarChunks = async () => {
+    public buscarChunks = async () => {
         const agora = Date.now()
         if (agora - this.lastFetchTime < 300) return
         this.lastFetchTime = agora
 
         if (!this.currentToken) return
 
-        const minX = Math.max(0, Math.floor(-this.cameraX / this.tamanhoBloco) - 2)
-        const maxX = Math.min(999, Math.floor((-this.cameraX + this.aplicativo.screen.width) / this.tamanhoBloco) + 2)
-        const minY = Math.max(0, Math.floor(-this.cameraY / this.tamanhoBloco) - 2)
-        const maxY = Math.min(999, Math.floor((-this.cameraY + this.aplicativo.screen.height) / this.tamanhoBloco) + 2)
+        const minX = Math.max(0, Math.floor(-this.cameraX / (this.tamanhoBloco * this.zoomLevel)) - 2)
+        const maxX = Math.min(999, Math.floor((-this.cameraX + this.aplicativo.screen.width) / (this.tamanhoBloco * this.zoomLevel)) + 2)
+        const minY = Math.max(0, Math.floor(-this.cameraY / (this.tamanhoBloco * this.zoomLevel)) - 2)
+        const maxY = Math.min(999, Math.floor((-this.cameraY + this.aplicativo.screen.height) / (this.tamanhoBloco * this.zoomLevel)) + 2)
 
         try {
             const dados = await api.get(`/map?minX=${minX}&maxX=${maxX}&minY=${minY}&maxY=${maxY}`, this.currentToken)
+            if (this._isDestroyed) return; // Proteção contra race condition
+            
             if (!dados) return
 
             const aldeias = dados.villages || []
@@ -351,18 +392,65 @@ export class MotorMapa {
 
                     circulo.eventMode = 'static'
                     circulo.cursor = 'pointer'
+                    
+                    let dragAtivo = false
+                    let pointerId: number | null = null
+
                     circulo.on('pointerdown', (evento) => {
                         evento.stopPropagation()
-                        if (this.aoClicarNaAldeiaCb) this.aoClicarNaAldeiaCb(aldeia)
+                        if (this.godModeEnabled) {
+                            dragAtivo = true
+                            pointerId = evento.pointerId
+                            containerAldeia.alpha = 0.7
+                            if (this.aplicativo.canvas) this.aplicativo.canvas.style.cursor = 'grabbing'
+                        } else {
+                            if (this.aoClicarNaAldeiaCb) this.aoClicarNaAldeiaCb(aldeia)
+                        }
                     })
+
+                    circulo.on('pointermove', (evento) => {
+                        if (dragAtivo && this.godModeEnabled && evento.pointerId === pointerId) {
+                            evento.stopPropagation()
+                            // Atualiza a posição visualmente enquanto arrasta
+                            containerAldeia.x = (evento.global.x - this.cameraX) / this.zoomLevel
+                            containerAldeia.y = (evento.global.y - this.cameraY) / this.zoomLevel
+                        }
+                    })
+
+                    const onPointerUp = (evento: any) => {
+                        if (dragAtivo && this.godModeEnabled) {
+                            evento.stopPropagation()
+                            dragAtivo = false
+                            pointerId = null
+                            containerAldeia.alpha = 1.0
+                            if (this.aplicativo.canvas) this.aplicativo.canvas.style.cursor = 'default'
+
+                            // Calcular novo X e Y em blocos
+                            const novoX = Math.floor(containerAldeia.x / this.tamanhoBloco)
+                            const novoY = Math.floor(containerAldeia.y / this.tamanhoBloco)
+
+                            // Snap visual para a grid provisório
+                            containerAldeia.x = novoX * this.tamanhoBloco + (this.tamanhoBloco / 2)
+                            containerAldeia.y = novoY * this.tamanhoBloco + (this.tamanhoBloco / 2)
+
+                            if (this.onVillageMoveCb) {
+                                this.onVillageMoveCb(aldeia.id, novoX, novoY)
+                            }
+                        }
+                    }
+
+                    circulo.on('pointerup', onPointerUp)
+                    circulo.on('pointerupoutside', onPointerUp)
 
                     const textoNome = new Text({
                         text: aldeia.name,
                         style: {
-                            fontSize: 10,
+                            fontSize: 14,
                             fill: 0xffffff,
                             align: 'center',
-                            dropShadow: { color: 0x000000, alpha: 0.8, distance: 1, blur: 2 }
+                            fontWeight: 'bold',
+                            stroke: { color: 0x000000, width: 4 },
+                            dropShadow: { color: 0x000000, alpha: 0.9, distance: 2, blur: 3 }
                         }
                     })
                     textoNome.anchor.set(0.5, 0)
@@ -384,24 +472,65 @@ export class MotorMapa {
         this.aplicativo.stage.eventMode = 'static'
         this.aplicativo.stage.hitArea = this.aplicativo.screen
 
+        if (this.aplicativo.canvas) {
+            this.aplicativo.canvas.addEventListener('wheel', (e) => {
+                e.preventDefault()
+                // A fórmula exponencial acomoda tanto mouses de roda (saltos de 100) quanto pinch-to-zoom de touchpads (saltos fracionados)
+                const fator = Math.exp(-e.deltaY * 0.002);
+                let novoZoom = this.zoomLevel * fator;
+                novoZoom = Math.max(0.3, Math.min(2.5, novoZoom));
+                
+                if (novoZoom !== this.zoomLevel) {
+                    const globalX = e.offsetX;
+                    const globalY = e.offsetY;
+                    
+                    const mundoX = (globalX - this.cameraX) / this.zoomLevel;
+                    const mundoY = (globalY - this.cameraY) / this.zoomLevel;
+                    
+                    this.zoomLevel = novoZoom;
+                    
+                    this.cameraX = globalX - (mundoX * this.zoomLevel);
+                    this.cameraY = globalY - (mundoY * this.zoomLevel);
+                    
+                    this.atualizarCamera();
+                }
+            }, { passive: false });
+        }
+
         this.aplicativo.stage.on('pointerdown', (evento) => {
+            // Se estiver no God Mode, e for um clique limpo no mapa (pois o circulo da aldeia daria stopPropagation)
+            // vamos anotar a posição inicial de descida para ver se é só um clique ou um arrasto da câmera
             this.estaArrastando = true
             this.inicioArrasto.x = evento.global.x - this.cameraX
             this.inicioArrasto.y = evento.global.y - this.cameraY
             if (this.aplicativo.canvas) this.aplicativo.canvas.style.cursor = 'grabbing'
         })
 
+        let cameraMoveu = false
         this.aplicativo.stage.on('pointermove', (evento) => {
             if (this.estaArrastando) {
+                cameraMoveu = true
                 this.cameraX = evento.global.x - this.inicioArrasto.x
                 this.cameraY = evento.global.y - this.inicioArrasto.y
                 this.atualizarCamera()
             }
         })
 
-        const aoSoltarPonteiro = () => {
+        const aoSoltarPonteiro = (evento: any) => {
             this.estaArrastando = false
             if (this.aplicativo && this.aplicativo.canvas) this.aplicativo.canvas.style.cursor = 'default'
+            
+            // Se soltou e não moveu a câmera, e o GodMode estiver on, é um clique pra criar aldeia!
+            if (!cameraMoveu && this.godModeEnabled && this.onMapClickCb) {
+                const globalX = evento.global.x - this.cameraX
+                const globalY = evento.global.y - this.cameraY
+                const blocoX = Math.floor(globalX / (this.tamanhoBloco * this.zoomLevel))
+                const blocoY = Math.floor(globalY / (this.tamanhoBloco * this.zoomLevel))
+                if (blocoX >= 0 && blocoX <= 999 && blocoY >= 0 && blocoY <= 999) {
+                    this.onMapClickCb(blocoX, blocoY)
+                }
+            }
+            cameraMoveu = false
             this.buscarChunks()
         }
 
@@ -417,12 +546,14 @@ export class MotorMapa {
     }
 
     destruir() {
+        this._isDestroyed = true;
         if (this.aplicativo) {
             try {
                 this.aplicativo.destroy(
                     { removeView: true }, 
                     { children: true, texture: true, textureSource: true, context: true }
                 );
+                this.aplicativo = null as any;
             } catch (erro) {}
         }
     }

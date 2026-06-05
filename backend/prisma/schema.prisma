@@ -24,9 +24,25 @@ model User {
   isDefeated   Boolean   @default(false)
 
   villages     Village[]
+  quests       UserQuest[]
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model UserQuest {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  questId     String   // Identificador da quest (ex: "BUILD_TIMBER_2")
+  completed   Boolean  @default(false)
+  claimed     Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, questId])
 }
 
 model AdminLog {
@@ -110,6 +126,7 @@ model VillageBuilding {
   farm           Int      @default(1)
   warehouse      Int      @default(1)
   barracks       Int      @default(0)
+  market         Int      @default(0)
   wall           Int      @default(0)
   church         Int      @default(0)
 }

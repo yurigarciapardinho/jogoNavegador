@@ -184,7 +184,7 @@ const GestaoUsuarios: React.FC = () => {
 
             {modalConfirmacao && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <div style={{ backgroundColor: 'var(--corFundoSecundaria)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '400px', textAlign: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+                    <div style={{ backgroundColor: 'var(--corFundoEscuro)', border: '1px solid rgba(255,255,255,0.1)', padding: '25px', borderRadius: '16px', width: '400px', textAlign: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
                         <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'rgba(244, 67, 54, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px' }}>
                             <Trash2 size={24} color="#f44336" />
                         </div>

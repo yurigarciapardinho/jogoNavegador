@@ -51,7 +51,7 @@ export default function TelaRelatorios() {
                                         className={`itemRelatorio ${relatorioSelecionado?.id === relatorio.id ? 'itemRelatorio--selecionado' : ''}`}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: vitoria ? 'var(--corSucesso)' : 'var(--corPerigo)' }}></div>
+                                            <div style={{ width: '12px', height: '12px', minWidth: '12px', minHeight: '12px', flexShrink: 0, borderRadius: '50%', backgroundColor: vitoria ? 'var(--corSucesso)' : 'var(--corPerigo)' }}></div>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
                                                 {relatorio.originName} ataca {relatorio.targetName}
                                             </span>
@@ -149,7 +149,7 @@ export default function TelaRelatorios() {
                             {relatorioSelecionado.result === 'ATTACKER_WON' && (
                                 <div className="cartaoItem" style={{ marginTop: 'var(--espacamentoMedio)', textAlign: 'center' }}>
                                     <h3 style={{ color: '#d97706', marginBottom: 'var(--espacamentoPequeno)', textTransform: 'uppercase', fontSize: '0.875rem' }}>Saque (Recursos Roubados)</h3>
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--espacamentoGrande)', fontWeight: 'bold' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--espacamentoGrande)', fontWeight: 'bold', flexWrap: 'wrap' }}>
                                         <div style={{ color: '#fcd34d' }}>Madeira: {Math.floor(relatorioSelecionado.lootedWood)}</div>
                                         <div style={{ color: '#fca5a5' }}>Argila: {Math.floor(relatorioSelecionado.lootedClay)}</div>
                                         <div style={{ color: '#cbd5e1' }}>Ferro: {Math.floor(relatorioSelecionado.lootedIron)}</div>
