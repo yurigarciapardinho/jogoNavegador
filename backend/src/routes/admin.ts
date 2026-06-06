@@ -592,25 +592,147 @@ export default async function adminRoutes(fastify: FastifyInstance, opts: { pris
             fs.mkdirSync(backupsDir)
         }
 
-        const filename = `backup_${Date.now()}.sql`
+        const filename = `backup_${Date.now()}.json`
         const filepath = path.join(backupsDir, filename)
-        const dbUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL
 
-        if (!dbUrl) return reply.code(500).send({ error: 'DATABASE_URL não configurada no servidor.' })
+        try {
+            const dbDump = {
+                users: await prisma.user.findMany(),
+                serverConfig: await prisma.serverConfig.findMany(),
+                villages: await prisma.village.findMany({
+                    include: {
+                        resources: true,
+                        buildings: true,
+                        units: true,
+                        boosters: true
+                    }
+                }),
+                movements: await prisma.movement.findMany(),
+                combatReports: await prisma.combatReport.findMany(),
+                buildingQueues: await prisma.buildingQueue.findMany(),
+                unitQueues: await prisma.unitQueue.findMany(),
+                adminLogs: await prisma.adminLog.findMany(),
+                userQuests: await prisma.userQuest.findMany()
+            }
 
-        return new Promise((resolve, reject) => {
-            exec(`pg_dump "${dbUrl}" > "${filepath}"`, async (error, stdout, stderr) => {
-                if (error) {
-                    fastify.log.error(error)
-                    return reply.code(500).send({ error: 'Falha ao criar o backup.' })
+            fs.writeFileSync(filepath, JSON.stringify(dbDump, null, 2))
+
+            await prisma.adminLog.create({
+                data: { adminId, action: 'BACKUP_DB', details: `Backup JSON criado: ${filename}` }
+            })
+            
+            return { success: true, file: filename }
+        } catch (error) {
+            fastify.log.error(error)
+            return reply.code(500).send({ error: 'Falha ao criar o backup JSON.' })
+        }
+    })
+
+    // 16. Listar Backups (JSON)
+    fastify.get('/admin/db/backups', async (request: any, reply) => {
+        const backupsDir = path.join(process.cwd(), 'backups')
+        if (!fs.existsSync(backupsDir)) return { backups: [] }
+        const files = fs.readdirSync(backupsDir).filter(f => f.endsWith('.json'))
+        files.sort((a, b) => {
+            return fs.statSync(path.join(backupsDir, b)).mtimeMs - fs.statSync(path.join(backupsDir, a)).mtimeMs
+        })
+        return { backups: files }
+    })
+
+    // 17. Restaurar Backup
+    fastify.post('/admin/db/restore', async (request: any, reply) => {
+        const adminId = request.user.id
+        const { password, filename } = request.body
+
+        if (!password || !filename) return reply.code(400).send({ error: 'Senha e Nome do Arquivo são obrigatórios.' })
+
+        const admin = await prisma.user.findUnique({ where: { id: adminId } })
+        if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+            return reply.code(401).send({ error: 'Senha incorreta. Restauração abortada.' })
+        }
+
+        const filepath = path.join(process.cwd(), 'backups', filename)
+        if (!fs.existsSync(filepath)) {
+            return reply.code(404).send({ error: 'Arquivo de backup não encontrado.' })
+        }
+
+        try {
+            const rawData = fs.readFileSync(filepath, 'utf-8')
+            const dbDump = JSON.parse(rawData)
+
+            await prisma.$transaction([
+                prisma.userQuest.deleteMany({}),
+                prisma.villageBooster.deleteMany({}),
+                prisma.supportingTroop.deleteMany({}),
+                prisma.combatReport.deleteMany({}),
+                prisma.movement.deleteMany({}),
+                prisma.unitQueue.deleteMany({}),
+                prisma.buildingQueue.deleteMany({}),
+                prisma.villageUnit.deleteMany({}),
+                prisma.villageBuilding.deleteMany({}),
+                prisma.villageResource.deleteMany({}),
+                prisma.village.deleteMany({}),
+                prisma.user.deleteMany({}),
+                prisma.serverConfig.deleteMany({})
+            ])
+
+            if (dbDump.users?.length) await prisma.user.createMany({ data: dbDump.users })
+            if (dbDump.serverConfig?.length) await prisma.serverConfig.createMany({ data: dbDump.serverConfig })
+
+            if (dbDump.villages?.length) {
+                const villagesBase = dbDump.villages.map((v: any) => ({
+                    id: v.id, name: v.name, x: v.x, y: v.y, userId: v.userId, createdAt: v.createdAt
+                }))
+                await prisma.village.createMany({ data: villagesBase })
+
+                const resources = []
+                const buildings = []
+                const units = []
+                const boosters = []
+
+                for (const v of dbDump.villages) {
+                    if (v.resources) {
+                        const { villageId, ...rest } = v.resources
+                        resources.push({ ...rest, villageId: v.id })
+                    }
+                    if (v.buildings) {
+                        const { villageId, ...rest } = v.buildings
+                        buildings.push({ ...rest, villageId: v.id })
+                    }
+                    if (v.units) {
+                        const { villageId, ...rest } = v.units
+                        units.push({ ...rest, villageId: v.id })
+                    }
+                    if (v.boosters?.length) {
+                        v.boosters.forEach((b: any) => {
+                            const { villageId, ...rest } = b
+                            boosters.push({ ...rest, villageId: v.id })
+                        })
+                    }
                 }
 
-                await prisma.adminLog.create({
-                    data: { adminId, action: 'BACKUP_DB', details: `Backup criado: ${filename}` }
-                })
-                
-                resolve(reply.send({ success: true, file: filename }))
+                if (resources.length) await prisma.villageResource.createMany({ data: resources })
+                if (buildings.length) await prisma.villageBuilding.createMany({ data: buildings })
+                if (units.length) await prisma.villageUnit.createMany({ data: units })
+                if (boosters.length) await prisma.villageBooster.createMany({ data: boosters })
+            }
+
+            if (dbDump.movements?.length) await prisma.movement.createMany({ data: dbDump.movements })
+            if (dbDump.combatReports?.length) await prisma.combatReport.createMany({ data: dbDump.combatReports })
+            if (dbDump.buildingQueues?.length) await prisma.buildingQueue.createMany({ data: dbDump.buildingQueues })
+            if (dbDump.unitQueues?.length) await prisma.unitQueue.createMany({ data: dbDump.unitQueues })
+            if (dbDump.userQuests?.length) await prisma.userQuest.createMany({ data: dbDump.userQuests })
+            
+            await prisma.adminLog.create({
+                data: { adminId, action: 'RESTORE_DB', details: `O Backup ${filename} foi restaurado. O mundo anterior foi apagado.` }
             })
-        })
+
+            invalidarServerConfigCache()
+
+            return { success: true, message: 'Backup restaurado com sucesso!' }
+        } catch (error) {
+            fastify.log.error(error)
+            return reply.code(500).send({ error: 'Erro catastrófico ao restaurar o JSON.' })
+        }
     })
 }

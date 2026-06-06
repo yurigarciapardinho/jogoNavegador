@@ -23,10 +23,6 @@ if (!databaseUrl) {
 // A URL do serviço de IA do Conselheiro é configurável por ambiente,
 // permitindo apontar para instâncias diferentes em dev/produção.
 const conselheiroUrl = process.env.CONSELHEIRO_URL
-if (!conselheiroUrl) {
-    console.error('[ERRO FATAL] A variável de ambiente CONSELHEIRO_URL não está definida.')
-    process.exit(1)
-}
 
 import fastifyJwt from '@fastify/jwt'
 import authRoutes from './routes/auth'
@@ -64,8 +60,14 @@ const prisma = new PrismaClient({ adapter })
 
 import fastifyRateLimit from '@fastify/rate-limit'
 
+const corsOrigin = process.env.CORS_ORIGIN
+if (process.env.NODE_ENV === 'production' && !corsOrigin) {
+    console.error('[ERRO FATAL] CORS_ORIGIN não definido para o ambiente de produção.')
+    process.exit(1)
+}
+
 fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN ?? '*',
+    origin: corsOrigin ?? '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 })
 
@@ -92,8 +94,15 @@ fastify.addHook('preHandler', async (request, reply) => {
     }
 })
 
+const jwtSecret = process.env.JWT_SECRET
+
+if (!jwtSecret) {
+    console.error('[ERRO FATAL] JWT_SECRET não definido.')
+    process.exit(1)
+}
+
 fastify.register(fastifyJwt, {
-    secret: process.env.JWT_SECRET || 'supersecret_ygp_kast_key'
+    secret: jwtSecret
 })
 
 fastify.decorate('authenticate', async (request: any, reply: any) => {
@@ -986,6 +995,12 @@ fastify.get('/village/:id', { preValidation: [fastify.authenticate] }, async (re
 })
 
 fastify.post('/conselheiro', async (request, reply) => {
+    if (!conselheiroUrl) {
+        return reply.code(503).send({
+            error: 'O serviço do Conselheiro não está configurado neste ambiente.'
+        })
+    }
+
     const body = request.body as { pergunta?: string }
 
     // Valida a presença e o conteúdo da pergunta antes de consultar o serviço externo.
