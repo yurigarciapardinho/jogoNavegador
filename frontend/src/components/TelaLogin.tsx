@@ -10,12 +10,15 @@ const TelaLogin: React.FC = () => {
     const [emailInformado, definirEmail] = useState('')
     const [nomeInformado, definirNome] = useState('')
     const [senhaInformada, definirSenha] = useState('')
+    const [confirmarSenhaInformada, definirConfirmarSenha] = useState('')
     const [regiao, definirRegiao] = useState('ALEATORIO')
     const [carregando, definirCarregando] = useState(false)
+    const [senhaVisivel, definirSenhaVisivel] = useState(false)
     
     const [erroEmail, definirErroEmail] = useState('')
     const [erroNome, definirErroNome] = useState('')
     const [erroSenha, definirErroSenha] = useState('')
+    const [erroConfirmarSenha, definirErroConfirmarSenha] = useState('')
 
     // Função de validação padrão YGP (atualizada para spans ao invés de alerts)
     const validacoes = () => {
@@ -24,19 +27,28 @@ const TelaLogin: React.FC = () => {
         definirErroEmail('')
         definirErroNome('')
         definirErroSenha('')
+        definirErroConfirmarSenha('')
 
-        if (!modoLogin && (!emailInformado.includes('@') || !emailInformado.includes('.'))) {
+        const emailLimpo = emailInformado.trim()
+        const nomeLimpo = nomeInformado.trim()
+
+        if (!modoLogin && (!emailLimpo.includes('@') || !emailLimpo.includes('.'))) {
             definirErroEmail('Informe um e-mail válido.')
             ehValido = false
         }
 
-        if (nomeInformado.length < 3) {
+        if (nomeLimpo.length < 3) {
             definirErroNome('O usuário deve ter pelo menos 3 caracteres.')
             ehValido = false
         }
 
         if (senhaInformada.length < 6) {
             definirErroSenha('A senha deve ter pelo menos 6 caracteres.')
+            ehValido = false
+        }
+
+        if (!modoLogin && senhaInformada !== confirmarSenhaInformada) {
+            definirErroConfirmarSenha('As senhas não coincidem.')
             ehValido = false
         }
 
@@ -52,8 +64,8 @@ const TelaLogin: React.FC = () => {
 
         const urlAPI = modoLogin ? '/auth/login' : '/auth/register'
         const corpoRequisicao = modoLogin 
-            ? { username: nomeInformado, password: senhaInformada } 
-            : { email: emailInformado, username: nomeInformado, password: senhaInformada, region: regiao }
+            ? { username: nomeInformado.trim(), password: senhaInformada } 
+            : { email: emailInformado.trim(), username: nomeInformado.trim(), password: senhaInformada, confirmPassword: confirmarSenhaInformada, region: regiao }
 
         try {
             const dados = await api.post(urlAPI, corpoRequisicao)
@@ -67,6 +79,7 @@ const TelaLogin: React.FC = () => {
                 adicionarNotificacao('Conta criada com sucesso! Faça login.', 'sucesso')
                 definirModoLogin(true)
                 definirSenha('')
+                definirConfirmarSenha('')
             }
         } catch (erro: any) {
             adicionarNotificacao(erro.message || 'Erro de conexão com o servidor.', 'erro')
@@ -80,6 +93,8 @@ const TelaLogin: React.FC = () => {
         definirErroEmail('')
         definirErroNome('')
         definirErroSenha('')
+        definirErroConfirmarSenha('')
+        definirSenhaVisivel(false)
     }
 
     return (
@@ -139,15 +154,51 @@ const TelaLogin: React.FC = () => {
 
                     <div className="campoGrupo">
                         <label className="campoRotulo">Senha</label>
-                        <input 
-                            id="inputSenha"
-                            type="password" 
-                            value={senhaInformada}
-                            onChange={(e) => definirSenha(e.target.value)}
-                            className={`campoEntrada ${erroSenha ? 'campoEntrada--erro' : ''}`}
-                        />
+                        <div className="campoEntrada--senha-wrapper">
+                            <input 
+                                id="inputSenha"
+                                type={senhaVisivel ? 'text' : 'password'}
+                                value={senhaInformada}
+                                onChange={(e) => definirSenha(e.target.value)}
+                                className={`campoEntrada ${erroSenha ? 'campoEntrada--erro' : ''}`}
+                            />
+                            <button 
+                                type="button"
+                                className="botaoOlhinho"
+                                onClick={() => definirSenhaVisivel(!senhaVisivel)}
+                                aria-label={senhaVisivel ? 'Ocultar senha' : 'Mostrar senha'}
+                                aria-pressed={senhaVisivel}
+                            >
+                                <span aria-hidden="true">{senhaVisivel ? '👁️‍🗨️' : '👁️'}</span>
+                            </button>
+                        </div>
                         {erroSenha && <span className="mensagemErroValidacao">{erroSenha}</span>}
                     </div>
+
+                    {!modoLogin && (
+                        <div className="campoGrupo">
+                            <label className="campoRotulo">Confirmar Senha</label>
+                            <div className="campoEntrada--senha-wrapper">
+                                <input 
+                                    id="inputConfirmarSenha"
+                                    type={senhaVisivel ? 'text' : 'password'}
+                                    value={confirmarSenhaInformada}
+                                    onChange={(e) => definirConfirmarSenha(e.target.value)}
+                                    className={`campoEntrada ${erroConfirmarSenha ? 'campoEntrada--erro' : ''}`}
+                                />
+                                <button 
+                                    type="button"
+                                    className="botaoOlhinho"
+                                    onClick={() => definirSenhaVisivel(!senhaVisivel)}
+                                    aria-label={senhaVisivel ? 'Ocultar senha' : 'Mostrar senha'}
+                                    aria-pressed={senhaVisivel}
+                                >
+                                    <span aria-hidden="true">{senhaVisivel ? '👁️‍🗨️' : '👁️'}</span>
+                                </button>
+                            </div>
+                            {erroConfirmarSenha && <span className="mensagemErroValidacao">{erroConfirmarSenha}</span>}
+                        </div>
+                    )}
 
                     <button 
                         type="submit" 

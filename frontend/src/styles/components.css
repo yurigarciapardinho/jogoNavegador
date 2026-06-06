@@ -551,3 +551,39 @@
   outline-offset: 4px;
   border-radius: 4px;
 }
+
+/* Container de entrada de senha (Olhinho) */
+.campoEntrada--senha-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.campoEntrada--senha-wrapper .campoEntrada {
+  padding-right: 40px; /* Espaço para o ícone */
+  width: 100%;
+}
+
+.botaoOlhinho {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--corTextoSecundario);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--velocidadeTransicao) ease;
+}
+
+.botaoOlhinho:hover {
+  color: var(--corTexto);
+}
+
+.botaoOlhinho:focus-visible {
+  outline: 2px solid var(--corPrimaria);
+  border-radius: 4px;
+}

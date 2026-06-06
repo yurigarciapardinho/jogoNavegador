@@ -8,6 +8,7 @@ interface RegisterBody {
     email?: string
     username?: string
     password?: string
+    confirmPassword?: string
     region?: string
 }
 
@@ -29,9 +30,22 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
         const email = body.email.trim().toLowerCase()
         const username = body.username.trim()
         const password = body.password
+        const confirmPassword = body.confirmPassword
+
+        if (username.length < 3) {
+            return reply.code(400).send({ error: 'O usuário deve ter pelo menos 3 caracteres.' })
+        }
+
+        if (!email.includes('@') || !email.includes('.')) {
+            return reply.code(400).send({ error: 'Informe um e-mail válido.' })
+        }
 
         if (password.length < 6) {
             return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres.' })
+        }
+
+        if (password !== confirmPassword) {
+            return reply.code(400).send({ error: 'As senhas não coincidem.' })
         }
 
         // Verifica se usuário existe
