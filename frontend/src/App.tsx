@@ -88,7 +88,7 @@ const App: React.FC = () => {
             
             <header className="cabecalhoJogo">
                 <div className="cabecalhoJogo_areaLogo">
-                    <div className="cabecalhoJogo_logo">TW2 Clone</div>
+                    <div className="cabecalhoJogo_logo">K.A.S.T.</div>
                     {usuario && (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <span className="cabecalhoJogo_nomeJogador">Senhor(a) {usuario.nomeUsuario}</span>

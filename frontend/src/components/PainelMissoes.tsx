@@ -33,7 +33,7 @@ export const PainelMissoes: React.FC<{ aoAtualizar: () => void }> = ({ aoAtualiz
 
     useEffect(() => {
         // Carrega posição do cache
-        const posSalva = localStorage.getItem('tw2_missao_pos')
+        const posSalva = localStorage.getItem('kast_missao_pos')
         if (posSalva) {
             try {
                 const parsed = JSON.parse(posSalva)
@@ -118,7 +118,7 @@ export const PainelMissoes: React.FC<{ aoAtualizar: () => void }> = ({ aoAtualiz
         e.currentTarget.releasePointerCapture(e.pointerId)
         
         if (hasMoved.current) {
-            localStorage.setItem('tw2_missao_pos', JSON.stringify(posicao))
+            localStorage.setItem('kast_missao_pos', JSON.stringify(posicao))
         } else {
             setIsOpen(true)
         }

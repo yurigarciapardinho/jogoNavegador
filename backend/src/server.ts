@@ -93,7 +93,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 })
 
 fastify.register(fastifyJwt, {
-    secret: process.env.JWT_SECRET || 'supersecret_ygp_tw2_clone_key'
+    secret: process.env.JWT_SECRET || 'supersecret_ygp_kast_key'
 })
 
 fastify.decorate('authenticate', async (request: any, reply: any) => {
@@ -1016,7 +1016,7 @@ const iniciarServidor = async () => {
         try {
             await fastify.listen({ port: portaAtual, host: process.env.HOST || '127.0.0.1' })
             console.log('========================================')
-            console.log('TW2 Clone — Servidor iniciado (YGP)')
+            console.log('K.A.S.T. — Servidor iniciado (YGP)')
             console.log(`Backend: http://localhost:${portaAtual}`)
             console.log('Frontend: http://localhost:5173')
             console.log('========================================')

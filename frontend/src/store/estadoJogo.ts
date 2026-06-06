@@ -113,7 +113,7 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
     definirMensagemGlobal: (msg) => set({ mensagemGlobal: msg }),
     telaAtual: (() => {
         try {
-            const token = localStorage.getItem('tw2_token')
+            const token = localStorage.getItem('kast_token')
             if (token) {
                 const payload = JSON.parse(atob(token.split('.')[1]))
                 if (payload.role === 'ADMIN') return 'admin'
@@ -122,10 +122,10 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
         return 'aldeia'
     })() as NomeTela,
     definirTela: (tela) => set({ telaAtual: tela }),
-    token: localStorage.getItem('tw2_token'),
+    token: localStorage.getItem('kast_token'),
     usuario: (() => {
         try {
-            const token = localStorage.getItem('tw2_token')
+            const token = localStorage.getItem('kast_token')
             if (token) {
                 const payload = JSON.parse(atob(token.split('.')[1]))
                 return { id: payload.id, nomeUsuario: payload.username, role: payload.role }
@@ -151,11 +151,11 @@ export const usarEstadoJogo = create<EstadoJogo>((set, get) => ({
         notificacoes: estado.notificacoes.filter(n => n.id !== id)
     })),
     realizarLogin: (token, usuario) => {
-        localStorage.setItem('tw2_token', token)
+        localStorage.setItem('kast_token', token)
         set({ token, usuario, telaAtual: usuario.role === 'ADMIN' ? 'admin' : 'aldeia' })
     },
     realizarLogout: () => {
-        localStorage.removeItem('tw2_token')
+        localStorage.removeItem('kast_token')
         set({ token: null, usuario: null, dadosAldeia: null, filaAtiva: [], filaUnidadesAtiva: [], userVillages: [], activeVillageId: null })
     },
     isDefeated: false,
