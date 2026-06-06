@@ -181,19 +181,29 @@ export const PainelMissoes: React.FC<{ aoAtualizar: () => void }> = ({ aoAtualiz
                         </div>
                         
                         <div className="modalMissoes_corpo">
-                            {missoesOrdenadas.map(missao => (
-                                <div key={missao.id} style={{ 
+                            {missoesOrdenadas.map(missao => {
+                                const isEpic = missao.id === 'Q_EXPANSION';
+                                const style = { 
                                     background: missao.completed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.3)', 
                                     padding: '16px', 
                                     borderRadius: '8px', 
                                     display: 'flex', 
-                                    flexDirection: 'column', 
+                                    flexDirection: 'column' as const, 
                                     gap: '12px',
-                                    border: missao.completed ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255,255,255,0.05)'
-                                }}>
+                                    border: missao.completed 
+                                        ? '1px solid rgba(16, 185, 129, 0.4)' 
+                                        : isEpic 
+                                            ? '1px solid rgba(234, 179, 8, 0.5)' 
+                                            : '1px solid rgba(255,255,255,0.05)',
+                                    boxShadow: isEpic && !missao.completed ? '0 0 15px rgba(234, 179, 8, 0.1)' : 'none'
+                                };
+                                return (
+                                <div key={missao.id} style={style}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                                         <div>
-                                            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'white' }}>{missao.title}</h3>
+                                            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: isEpic ? '#fde047' : 'white' }}>
+                                                {isEpic ? '👑 ' : ''}{missao.title}
+                                            </h3>
                                             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--corTextoSecundario)' }}>{missao.description}</p>
                                         </div>
                                         <div>
@@ -214,19 +224,26 @@ export const PainelMissoes: React.FC<{ aoAtualizar: () => void }> = ({ aoAtualiz
                                         </div>
                                     </div>
                                     
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        <span className="pillRecompensa" title="Madeira">
-                                            <span aria-hidden="true">🪵</span> <span style={{ color: '#d97706' }}>{missao.rewards.wood}</span>
-                                        </span>
-                                        <span className="pillRecompensa" title="Argila">
-                                            <span aria-hidden="true">🧱</span> <span style={{ color: '#ea580c' }}>{missao.rewards.clay}</span>
-                                        </span>
-                                        <span className="pillRecompensa" title="Ferro">
-                                            <span aria-hidden="true">⚒️</span> <span style={{ color: '#94a3b8' }}>{missao.rewards.iron}</span>
-                                        </span>
-                                    </div>
+                                    {isEpic ? (
+                                        <div style={{ color: '#fde047', fontWeight: 'bold', fontSize: '0.95rem' }}>
+                                            Recompensa: Fundação da Segunda Aldeia
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span className="pillRecompensa" title="Madeira">
+                                                <span aria-hidden="true">🪵</span> <span style={{ color: '#d97706' }}>{missao.rewards.wood}</span>
+                                            </span>
+                                            <span className="pillRecompensa" title="Argila">
+                                                <span aria-hidden="true">🧱</span> <span style={{ color: '#ea580c' }}>{missao.rewards.clay}</span>
+                                            </span>
+                                            <span className="pillRecompensa" title="Ferro">
+                                                <span aria-hidden="true">⚒️</span> <span style={{ color: '#94a3b8' }}>{missao.rewards.iron}</span>
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </div>
                 </div>

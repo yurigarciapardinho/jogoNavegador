@@ -93,11 +93,18 @@ export default async function authRoutes(fastify: FastifyInstance, opts: { prism
                         buildings: { create: {} }, // defaults
                         units: { create: {} }, // defaults
                         boosters: {
-                            create: {
-                                boosterType: 'ALL_RESOURCES',
-                                multiplier: 2.0,
-                                endTime: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas de booster
-                            }
+                            create: [
+                                {
+                                    boosterType: 'ALL_RESOURCES',
+                                    multiplier: 2.0,
+                                    endTime: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas de booster
+                                },
+                                {
+                                    boosterType: 'SHIELD',
+                                    multiplier: 1.0,
+                                    endTime: new Date(Date.now() + 15 * 60 * 1000) // 15 minutos de proteção inicial
+                                }
+                            ]
                         }
                     }
                 })

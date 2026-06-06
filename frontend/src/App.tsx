@@ -9,6 +9,7 @@ import GerenciadorNotificacoes from './components/GerenciadorNotificacoes'
 import VigiaDeBatalha from './components/VigiaDeBatalha'
 import TelaDerrota from './components/TelaDerrota'
 import AlertaAtaqueGlobal from './components/AlertaAtaqueGlobal'
+import PainelEfeitosAtivos from './components/PainelEfeitosAtivos'
 
 const App: React.FC = () => {
     const { telaAtual, definirTela, token, usuario, realizarLogout, mensagemGlobal, isDefeated, sincronizarAldeiaSilenciosa, userVillages, activeVillageId, trocarAldeiaAtiva } = usarEstadoJogo()
@@ -79,6 +80,7 @@ const App: React.FC = () => {
             <GerenciadorNotificacoes />
             <VigiaDeBatalha />
             <AlertaAtaqueGlobal />
+            <PainelEfeitosAtivos />
             
             {mensagemGlobal && (
                 <div style={{ backgroundColor: '#b91c1c', color: 'white', padding: '10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #7f1d1d' }}>

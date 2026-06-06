@@ -115,7 +115,7 @@ fastify.get('/me/villages', { preValidation: [fastify.authenticate] }, async (re
 
     const villages = await prisma.village.findMany({
         where: { userId: user.id },
-        include: { resources: true, buildings: true, units: true }
+        include: { resources: true, buildings: true, units: true, boosters: true }
     })
 
     if (villages.length === 0 && dbUser?.role !== 'ADMIN') {
@@ -497,12 +497,30 @@ fastify.post('/village/attack', { preValidation: [fastify.authenticate] }, async
 
     const origin = await prisma.village.findFirst({
         where: { id: originId, userId: user.id },
-        select: { id: true, x: true, y: true }
+        select: { id: true, x: true, y: true, boosters: { where: { boosterType: 'SHIELD', endTime: { gt: new Date() } } } }
     })
 
-    const target = await prisma.village.findUnique({ where: { id: targetId } })
+    const target = await prisma.village.findUnique({ 
+        where: { id: targetId },
+        include: { boosters: { where: { boosterType: 'SHIELD', endTime: { gt: new Date() } } } }
+    })
 
     if (!origin || !target) return reply.code(400).send({ error: 'Aldeia de origem ou destino inválida.' })
+
+    // Verifica se o alvo tem escudo
+    if (target.boosters && target.boosters.length > 0) {
+        return reply.code(400).send({ error: 'Esta aldeia está sob proteção divina e não pode ser atacada.' })
+    }
+
+    // Quebra o escudo da origem se estiver atacando um player
+    if (target.userId !== null && origin.boosters && origin.boosters.length > 0) {
+        await prisma.villageBooster.deleteMany({
+            where: {
+                villageId: origin.id,
+                boosterType: 'SHIELD'
+            }
+        })
+    }
 
     // Deduz tropas de forma atômica prevenindo condições de corrida
     try {

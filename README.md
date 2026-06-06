@@ -13,7 +13,7 @@
 
 <br />
 
-> *"O controle do território não é concedido, é conquistado."*
+> *"O controle do território não é dado, é conquistado."*
 
 **K.A.S.T.** (Kommuna de Aliança e Soberania das Terras) é um MMO de estratégia em tempo real focado em alta performance e gestão tática militar. Desenvolvido do zero para rodar nativamente no navegador utilizando renderização WebGL e cálculos paralelos em Worker. 
 
@@ -41,11 +41,11 @@ Iniciar os motores do K.A.S.T. em sua máquina é um processo automatizado. Siga
 Abra seu terminal favorito:
 
 ```bash
-# 1. Clone os arquivos
+# 1. Clone os arquivos de guerra
 git clone https://github.com/yurigarciapardinho/kast.git
 cd kast
 
-# 2. Autorize a execução do script
+# 2. Autorize a ignição do motor
 chmod +x Iniciar.sh
 
 # 3. Levante o império

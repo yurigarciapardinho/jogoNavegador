@@ -178,8 +178,52 @@ export default function TelaAldeia() {
             </div>
         )
     }
+    const getRequisitosEdificio = (tipo: string) => {
+        switch (tipo) {
+            case 'headquarters': return {}; // Sede nunca tem requisito
+            case 'barracks': return { headquarters: 3 };
+            case 'market': return { headquarters: 3, warehouse: 2 };
+            case 'wall': return { barracks: 1 };
+            case 'church': return { headquarters: 5 };
+            default: return { headquarters: 1 }; // Bosques, minas, fazenda, armazém exigem Sede 1
+        }
+    }
 
     const renderizarLinhaEdificio = (tipo: string, nome: string, nivel: number, corDestaque: string) => {
+        const requisitos = getRequisitosEdificio(tipo);
+        const hqAtual = dadosAldeia?.buildings?.headquarters || 0;
+        const armazemAtual = dadosAldeia?.buildings?.warehouse || 0;
+        const quartelAtual = dadosAldeia?.buildings?.barracks || 0;
+
+        let reqCumpridos = true;
+        let msgErro = '';
+
+        if (requisitos.headquarters && hqAtual < requisitos.headquarters) {
+            reqCumpridos = false;
+            msgErro = `Requer Sede Nível ${requisitos.headquarters}`;
+        } else if (requisitos.warehouse && armazemAtual < requisitos.warehouse) {
+            reqCumpridos = false;
+            msgErro = `Requer Armazém Nível ${requisitos.warehouse}`;
+        } else if (requisitos.barracks && quartelAtual < requisitos.barracks) {
+            reqCumpridos = false;
+            msgErro = `Requer Quartel Nível ${requisitos.barracks}`;
+        }
+
+        if (!reqCumpridos) {
+            return (
+                <div key={tipo} className="cartaoItem animarSurgimento" style={{ opacity: 0.5, filter: 'grayscale(100%)' }}>
+                    <div className="cartaoItem_cabecalho" style={{ marginBottom: 0 }}>
+                        <p style={{ fontWeight: 'bold', color: 'var(--corTextoSecundario)' }}>
+                            <span aria-hidden="true">🔒</span> {nome} (Bloqueado)
+                        </p>
+                        <p className="cartaoItem_detalhe" style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                            {msgErro}
+                        </p>
+                    </div>
+                </div>
+            )
+        }
+
         const filaAtivaItens = filaAtiva.filter(q => q.buildingType === tipo)
         const estaNafila = filaAtivaItens.length > 0
         const itemNaFila = estaNafila ? filaAtivaItens[0] : null
@@ -287,7 +331,7 @@ export default function TelaAldeia() {
         }
 
         return (
-            <div className="cartaoItem animarSurgimento">
+            <div key={tipo} className="cartaoItem animarSurgimento">
                 <div className="cartaoItem_cabecalho" style={{ marginBottom: 0 }}>
                     <div>
                         <p style={{ fontWeight: 'bold', color: corDestaque, display: 'flex', alignItems: 'center', gap: '8px' }}>
