@@ -54,7 +54,10 @@ fastify.setErrorHandler((error, request, reply) => {
     }
 })
 
-const pool = new Pool({ connectionString: databaseUrl })
+const pool = new Pool({ 
+    connectionString: databaseUrl,
+    max: 5
+})
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
@@ -675,6 +678,100 @@ fastify.post('/village/support', { preValidation: [fastify.authenticate] }, asyn
     }
 
     return { message: 'Apoio enviado com sucesso!' }
+})
+
+fastify.post('/village/transfer', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+    const user = request.user as { id: string }
+    const body = request.body as any
+    const { originId, targetId } = body
+
+    if (originId === targetId) {
+        return reply.code(400).send({ error: 'Comando inválido: A aldeia de origem e destino não podem ser a mesma.' })
+    }
+
+    const spear = Math.max(0, Math.floor(Number(body.spear) || 0))
+    const sword = Math.max(0, Math.floor(Number(body.sword) || 0))
+    const axe = Math.max(0, Math.floor(Number(body.axe) || 0))
+
+    if (spear + sword + axe <= 0) {
+        return reply.code(400).send({ error: 'Você deve transferir pelo menos uma tropa.' })
+    }
+
+    const origin = await prisma.village.findFirst({
+        where: { id: originId, userId: user.id },
+        select: { id: true, x: true, y: true, userId: true }
+    })
+
+    const target = await prisma.village.findUnique({ where: { id: targetId } })
+
+    if (!origin || !target) return reply.code(400).send({ error: 'Aldeia de origem ou destino inválida.' })
+    if (origin.userId !== target.userId) return reply.code(400).send({ error: 'Você só pode transferir tropas para suas próprias aldeias.' })
+
+    const { UNIT_STATS } = require('./gameLogic/unitEconomy')
+    const popCost = (spear * (UNIT_STATS.spear.population || 1)) +
+                    (sword * (UNIT_STATS.sword.population || 1)) +
+                    (axe * (UNIT_STATS.axe.population || 1))
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const { getFarmCapacity, getTotalUsedPopulation } = require('./gameLogic/economy')
+            const targetBuildings = await tx.villageBuilding.findUnique({ where: { villageId: targetId } })
+            const farmCap = getFarmCapacity(targetBuildings?.farm || 0)
+            const currentPop = await getTotalUsedPopulation(tx, targetId)
+
+            if (currentPop + popCost > farmCap) {
+                throw new Error('INSUFFICIENT_FARM')
+            }
+
+            const updateResult = await tx.villageUnit.updateMany({
+                where: { 
+                    villageId: origin.id,
+                    spear: { gte: spear },
+                    sword: { gte: sword },
+                    axe: { gte: axe }
+                },
+                data: {
+                    spear: { decrement: spear },
+                    sword: { decrement: sword },
+                    axe: { decrement: axe }
+                }
+            })
+
+            if (updateResult.count === 0) {
+                throw new Error('INSUFFICIENT_TROOPS')
+            }
+
+            const dx = target.x - origin.x
+            const dy = target.y - origin.y
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            
+            const config = await tx.serverConfig.findFirst()
+            const speedMultiplier = config?.speedMultiplier || 1.0
+
+            let tempoViagemMs = Math.round((distance * 30000) / speedMultiplier)
+            const arrivalTime = new Date(Date.now() + Math.max(1000, tempoViagemMs))
+
+            await tx.movement.create({
+                data: {
+                    type: 'TRANSFER',
+                    originId,
+                    targetId,
+                    spear, sword, axe,
+                    arrivalTime
+                }
+            })
+        })
+    } catch (erro: any) {
+        if (erro.message === 'INSUFFICIENT_TROOPS') {
+            return reply.code(400).send({ error: 'Você não tem essa quantidade de tropas.' })
+        }
+        if (erro.message === 'INSUFFICIENT_FARM') {
+            return reply.code(400).send({ error: 'A Fazenda da aldeia de destino não suporta essa quantidade de população.' })
+        }
+        throw erro
+    }
+
+    return { message: 'Transferência de tropas iniciada com sucesso!' }
 })
 
 fastify.post('/village/support/recall', { preValidation: [fastify.authenticate] }, async (request, reply) => {

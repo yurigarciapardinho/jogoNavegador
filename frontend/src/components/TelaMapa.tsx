@@ -170,7 +170,7 @@ export default function TelaMapa() {
         }
     }, [dadosAldeia])
 
-    const enviarMovimento = async (tipo: 'ATTACK' | 'SUPPORT') => {
+    const enviarMovimento = async (tipo: 'ATTACK' | 'SUPPORT' | 'TRANSFER') => {
         if (!dadosAldeia?.id) return
         
         if (qtdLanceiro + qtdEspadachim + qtdBarbaro <= 0) {
@@ -179,7 +179,7 @@ export default function TelaMapa() {
         }
 
         try {
-            const endpoint = tipo === 'ATTACK' ? '/village/attack' : '/village/support'
+            const endpoint = tipo === 'ATTACK' ? '/village/attack' : tipo === 'SUPPORT' ? '/village/support' : '/village/transfer'
             
             await api.post(endpoint, {
                 originId: dadosAldeia.id,
@@ -346,7 +346,7 @@ export default function TelaMapa() {
                             >
                                 Informação
                             </button>
-                            {aldeiaSelecionada.userId !== usuario?.id && usuario?.role !== 'ADMIN' && (
+                            {aldeiaSelecionada.id !== dadosAldeia?.id && (
                                 <>
                                     <button 
                                         role="tab"
@@ -364,6 +364,16 @@ export default function TelaMapa() {
                                     >
                                         Apoiar
                                     </button>
+                                    {aldeiaSelecionada.userId === usuario?.id && (
+                                        <button 
+                                            role="tab"
+                                            aria-selected={abaAtiva === 'transferir'}
+                                            onClick={() => definirAbaAtiva('transferir')} 
+                                            className={`botaoGeral ${abaAtiva === 'transferir' ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
+                                        >
+                                            Transferir
+                                        </button>
+                                    )}
                                 </>
                             )}
                             {aldeiaSelecionada.id !== dadosAldeia?.id && (
@@ -415,7 +425,7 @@ export default function TelaMapa() {
                             </div>
                         )}
 
-                        {(abaAtiva === 'atacar' || abaAtiva === 'apoiar') && (
+                        {(abaAtiva === 'atacar' || abaAtiva === 'apoiar' || abaAtiva === 'transferir') && (
                             <div style={{ marginTop: 'var(--espacamentoMedio)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--espacamentoMedio)' }}>
                                     <p className="campoRotulo" style={{ margin: 0 }}>Selecione as tropas:</p>
@@ -471,10 +481,10 @@ export default function TelaMapa() {
                                 </div>
 
                                 <button 
-                                    onClick={() => enviarMovimento(abaAtiva === 'atacar' ? 'ATTACK' : 'SUPPORT')}
+                                    onClick={() => enviarMovimento(abaAtiva === 'atacar' ? 'ATTACK' : abaAtiva === 'apoiar' ? 'SUPPORT' : 'TRANSFER')}
                                     className={`botaoGeral botaoGeral--largo ${abaAtiva === 'atacar' ? 'botaoGeral--perigo' : 'botaoGeral--sucesso'}`}
                                 >
-                                    Enviar {abaAtiva === 'atacar' ? 'Ataque' : 'Apoio'}
+                                    Enviar {abaAtiva === 'atacar' ? 'Ataque' : abaAtiva === 'apoiar' ? 'Apoio' : 'Transferência'}
                                 </button>
                             </div>
                         )}

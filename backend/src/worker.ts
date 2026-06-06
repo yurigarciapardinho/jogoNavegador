@@ -13,7 +13,10 @@ if (!databaseUrl) {
     process.exit(1)
 }
 
-const pool = new Pool({ connectionString: databaseUrl })
+const pool = new Pool({ 
+    connectionString: databaseUrl,
+    max: 5
+})
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 

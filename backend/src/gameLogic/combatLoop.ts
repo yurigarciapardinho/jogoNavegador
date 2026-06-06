@@ -272,6 +272,39 @@ export const startCombatLoop = (prisma: any) => {
 
                         console.log(`[COMBAT] Apoio de ${mov.originId} chegou em ${mov.targetId}.`)
 
+                    } else if (mov.type === 'TRANSFER') {
+                        // Transferência: As tropas passam a pertencer permanentemente à aldeia de destino
+                        const targetUnits = await tx.villageUnit.findUnique({
+                            where: { villageId: mov.targetId }
+                        })
+
+                        if (targetUnits) {
+                            await tx.villageUnit.update({
+                                where: { villageId: mov.targetId },
+                                data: {
+                                    spear: { increment: mov.spear },
+                                    sword: { increment: mov.sword },
+                                    axe: { increment: mov.axe }
+                                }
+                            })
+                        } else {
+                            await tx.villageUnit.create({
+                                data: {
+                                    villageId: mov.targetId,
+                                    spear: mov.spear,
+                                    sword: mov.sword,
+                                    axe: mov.axe
+                                }
+                            })
+                        }
+
+                        await tx.movement.update({
+                            where: { id: mov.id },
+                            data: { completed: true }
+                        })
+
+                        console.log(`[COMBAT] Transferência de tropas de ${mov.originId} para ${mov.targetId} concluída.`)
+
                     } else if (mov.type === 'RETURN') {
                         // Sincroniza e consolida o estado da aldeia de origem até o momento da chegada das tropas (mov.arrivalTime)
                         const originVillage = await atualizarEstadoAldeia(tx, mov.targetId, mov.arrivalTime)
