@@ -1,18 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { usarEstadoJogo } from '../store/estadoJogo'
 import ContadorTempo from './ContadorTempo'
 import PainelMovimentos from './PainelMovimentos'
 import { PainelMissoes } from './PainelMissoes'
 import { obterCustoEdificio, obterPropriedadesUnidade, obterProducaoRecurso, obterCapacidadeArmazem, obterCapacidadeFazenda, PROPRIEDADES_UNIDADES, MAX_LEVELS, getBuildingPopCost } from '../constantes/constantesJogo'
 import { api } from '../api'
+import { UnidadeRecrutamentoCard } from './UnidadeRecrutamentoCard'
 
 export default function TelaAldeia() {
     const { recursos, token, adicionarNotificacao, dadosAldeia, filaAtiva, filaUnidadesAtiva, activeMultipliers, sincronizarAldeiaSilenciosa } = usarEstadoJogo()
     const [erroBusca, definirErroBusca] = useState('')
     const [carregandoConstrucao, definirCarregandoConstrucao] = useState(false)
-    const [quantidadesRecrutamento, definirQuantidadesRecrutamento] = useState<Record<string, number>>({ spear: 0, sword: 0, axe: 0 })
 
-    const calcularPopulacaoAtual = () => {
+
+    const popAtual = useMemo(() => {
         if (!dadosAldeia) return 0;
         let pop = 0;
         const addUnidades = (spear = 0, sword = 0, axe = 0) => {
@@ -55,7 +56,9 @@ export default function TelaAldeia() {
         dadosAldeia.supportingSent?.forEach((s: any) => addUnidades(s.spear, s.sword, s.axe));
 
         return pop;
-    };
+    }, [dadosAldeia, filaAtiva, filaUnidadesAtiva]);
+
+    const maxPop = obterCapacidadeFazenda(dadosAldeia?.buildings?.farm || 1);
 
     const buscarAldeia = async () => {
         try {
@@ -87,14 +90,12 @@ export default function TelaAldeia() {
 
 
 
-    const recrutarTropa = async (tipoUnidade: string) => {
-        const quantidade = quantidadesRecrutamento[tipoUnidade]
+    const recrutarTropa = async (tipoUnidade: string, quantidade: number) => {
         if (!quantidade || quantidade <= 0 || !dadosAldeia) return
         definirCarregandoConstrucao(true)
         try {
             await api.post('/village/recruit', { villageId: dadosAldeia.id, unitType: tipoUnidade, amount: quantidade }, token)
             adicionarNotificacao(`Treinamento de ${quantidade} tropas iniciado!`, 'sucesso')
-            definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipoUnidade]: 0 })
             await sincronizarAldeiaSilenciosa()
         } catch (erro: any) {
             adicionarNotificacao(erro.message || 'Erro ao enviar ordem de recrutamento.', 'erro')
@@ -104,78 +105,18 @@ export default function TelaAldeia() {
     }
 
     const renderizarLinhaUnidade = (tipo: string) => {
-        const propriedades = obterPropriedadesUnidade(tipo)
-        const quantidadeAtual = dadosAldeia?.units?.[tipo] || 0
-        const quantidadeParaRecrutar = quantidadesRecrutamento[tipo] || 0
-        
-        const nivelQuartel = dadosAldeia?.buildings?.barracks || 0
-        const fatorTempo = Math.pow(0.95, Math.max(0, nivelQuartel - 1))
-        
-        const totalMadeira = propriedades.madeira * quantidadeParaRecrutar
-        const totalArgila = propriedades.argila * quantidadeParaRecrutar
-        const totalFerro = propriedades.ferro * quantidadeParaRecrutar
-        const totalTempo = Math.floor(propriedades.tempoSegundos * fatorTempo * quantidadeParaRecrutar)
-        
-        const popAtual = calcularPopulacaoAtual()
-        const maxPop = obterCapacidadeFazenda(dadosAldeia?.buildings?.farm || 1)
-        const popSuficiente = (popAtual + (quantidadeParaRecrutar * (propriedades.populacao || 1))) <= maxPop
-
-        const podePagar = recursos.madeira >= totalMadeira && recursos.argila >= totalArgila && recursos.ferro >= totalFerro
-        const estaValido = quantidadeParaRecrutar > 0 && podePagar && popSuficiente && !carregandoConstrucao
-        
-        const estaNafila = filaUnidadesAtiva.find(q => q.unitType === tipo)
-
         return (
-            <div className="cartaoItem animarSurgimento" key={tipo}>
-                <div className="cartaoItem_cabecalho">
-                    <div>
-                        <p style={{ fontWeight: 'bold' }}>{propriedades.nome}</p>
-                        <p className="cartaoItem_detalhe">Em casa: {quantidadeAtual}</p>
-                    </div>
-                    {estaNafila && (
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ color: 'var(--corPrimariaHover)', fontSize: '0.875rem', fontWeight: 'bold' }}>
-                                <ContadorTempo endTime={estaNafila.endTime} />
-                            </p>
-                            <p className="cartaoItem_detalhe">Treinando: {estaNafila.amount}</p>
-                        </div>
-                    )}
-                </div>
-                
-                {!estaNafila && (
-                    <div className="cartaoItem_acoes">
-                        <input 
-                            type="number" 
-                            min="0" 
-                            value={quantidadeParaRecrutar || ''} 
-                            onChange={(e) => definirQuantidadesRecrutamento({ ...quantidadesRecrutamento, [tipo]: parseInt(e.target.value) || 0 })}
-                            className="campoEntrada"
-                            style={{ width: '80px', opacity: nivelQuartel === 0 ? 0.5 : 1 }}
-                            placeholder="0"
-                            disabled={nivelQuartel === 0}
-                            aria-label={`Quantidade de ${propriedades.nome} para treinar`}
-                        />
-                        <div className="cartaoItem_detalhe" style={{ flex: 1, marginLeft: 'var(--espacamentoPequeno)' }}>
-                            {quantidadeParaRecrutar > 0 && (
-                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                    <span title="Madeira"><span aria-hidden="true" style={{ color: '#d97706' }}>🪵</span> {totalMadeira}</span>
-                                    <span title="Argila"><span aria-hidden="true" style={{ color: '#ea580c' }}>🧱</span> {totalArgila}</span>
-                                    <span title="Ferro"><span aria-hidden="true" style={{ color: '#94a3b8' }}>⚒️</span> {totalFerro}</span>
-                                    <span title="População"><span aria-hidden="true">👨‍🌾</span> {quantidadeParaRecrutar * (propriedades.populacao || 1)}</span>
-                                    <span title="Tempo"><span aria-hidden="true">⏱️</span> {totalTempo}s</span>
-                                </div>
-                            )}
-                        </div>
-                        <button 
-                            onClick={() => recrutarTropa(tipo)}
-                            disabled={!estaValido || nivelQuartel === 0}
-                            className={`botaoGeral ${estaValido && nivelQuartel > 0 ? 'botaoGeral--sucesso' : 'botaoGeral--secundario'}`}
-                        >
-                            {nivelQuartel === 0 ? <><span aria-hidden="true">🔒</span> Bloqueado</> : 'Treinar'}
-                        </button>
-                    </div>
-                )}
-            </div>
+            <UnidadeRecrutamentoCard
+                key={tipo}
+                tipo={tipo}
+                dadosAldeia={dadosAldeia}
+                recursos={recursos}
+                filaUnidadesAtiva={filaUnidadesAtiva}
+                popAtual={popAtual}
+                maxPop={maxPop}
+                carregandoConstrucao={carregandoConstrucao}
+                onRecrutar={recrutarTropa}
+            />
         )
     }
     const getRequisitosEdificio = (tipo: string) => {
@@ -246,8 +187,7 @@ export default function TelaAldeia() {
         } else if (recursos.madeira < custo.madeira || recursos.argila < custo.argila || recursos.ferro < custo.ferro) {
             desativado = true
         } else if (popCusto > 0) {
-            const maxPop = obterCapacidadeFazenda(dadosAldeia?.buildings?.farm || 1)
-            const popAtualGlobal = calcularPopulacaoAtual()
+            const popAtualGlobal = popAtual;
             if (popAtualGlobal + popCusto > maxPop) {
                 desativado = true
             }
@@ -348,6 +288,11 @@ export default function TelaAldeia() {
                                 {popCusto > 0 && <span title="População"><span aria-hidden="true">👨‍🌾</span> {popCusto}</span>}
                             </div>
                         )}
+                        {(recursos.madeira < custo.madeira || recursos.argila < custo.argila || recursos.ferro < custo.ferro) && !estaNafila && !atingiuMaximo ? (
+                            <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>Recursos insuficientes</span>
+                        ) : popCusto > 0 && (popAtual + popCusto > maxPop) && !estaNafila && !atingiuMaximo ? (
+                            <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>Fazenda cheia</span>
+                        ) : null}
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         {atingiuMaximo ? (
@@ -394,8 +339,6 @@ export default function TelaAldeia() {
                 const argilaLotada = recursos.argila >= capacidadeArmazem
                 const ferroLotado = recursos.ferro >= capacidadeArmazem
                 
-                const popAtual = calcularPopulacaoAtual()
-                const maxPop = dadosAldeia?.buildings ? obterCapacidadeFazenda(dadosAldeia.buildings.farm || 1) : 240
                 const popLotada = popAtual >= maxPop
 
                 return (
