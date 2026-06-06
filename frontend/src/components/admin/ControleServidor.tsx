@@ -13,12 +13,15 @@ const ControleServidor: React.FC = () => {
     const [salvandoConfig, setSalvandoConfig] = useState(false)
 
     // Modais e Senhas
-    const [modalAcao, setModalAcao] = useState<'wipe' | 'backup' | null>(null)
+    const [modalAcao, setModalAcao] = useState<'wipe' | 'backup' | 'restore' | null>(null)
     const [senhaDigitada, setSenhaDigitada] = useState('')
     const [executando, definirExecutando] = useState(false)
+    const [backupsDisponiveis, setBackupsDisponiveis] = useState<string[]>([])
+    const [arquivoSelecionado, setArquivoSelecionado] = useState('')
 
     useEffect(() => {
         carregarConfig()
+        carregarBackups()
     }, [])
 
     const carregarConfig = async () => {
@@ -29,6 +32,18 @@ const ControleServidor: React.FC = () => {
             setGlobalMessage(config.globalMessage || '')
         } catch (erro) {
             adicionarNotificacao('Erro ao carregar configurações do servidor', 'erro')
+        }
+    }
+
+    const carregarBackups = async () => {
+        try {
+            const res = await api.get('/admin/db/backups', token)
+            setBackupsDisponiveis(res.backups || [])
+            if (res.backups?.length > 0) {
+                setArquivoSelecionado(res.backups[0])
+            }
+        } catch (erro) {
+            console.error('Erro ao carregar lista de backups', erro)
         }
     }
 
@@ -60,6 +75,10 @@ const ControleServidor: React.FC = () => {
             } else if (modalAcao === 'backup') {
                 const res = await api.post('/admin/db/backup', { password: senhaDigitada }, token)
                 adicionarNotificacao(`Backup criado com sucesso: ${res.file}`, 'sucesso')
+                carregarBackups()
+            } else if (modalAcao === 'restore') {
+                const res = await api.post('/admin/db/restore', { password: senhaDigitada, filename: arquivoSelecionado }, token)
+                adicionarNotificacao(res.message || 'Backup restaurado com sucesso!', 'sucesso')
             }
             setModalAcao(null)
             setSenhaDigitada('')
@@ -152,7 +171,15 @@ const ControleServidor: React.FC = () => {
                             className="botaoGeral"
                             style={{ background: 'rgba(33, 150, 243, 0.1)', border: '1px solid #2196F3', color: '#2196F3', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', width: '100%' }}
                         >
-                            <Save size={18} /> Gerar Backup Seguro (pg_dump)
+                            <Save size={18} /> Gerar Backup Seguro (JSON)
+                        </button>
+
+                        <button 
+                            onClick={() => setModalAcao('restore')}
+                            className="botaoGeral"
+                            style={{ background: 'rgba(255, 152, 0, 0.1)', border: '1px solid #FF9800', color: '#FF9800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', width: '100%' }}
+                        >
+                            <DatabaseBackup size={18} /> Restaurar Backup Antigo
                         </button>
 
                         <button 
@@ -169,20 +196,41 @@ const ControleServidor: React.FC = () => {
             {/* Modal de Confirmação Extrema com Senha */}
             {modalAcao && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(20, 0, 0, 0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <form onSubmit={executarAcaoCritica} style={{ backgroundColor: '#111', border: modalAcao === 'wipe' ? '1px solid #f44336' : '1px solid #2196F3', padding: '35px', borderRadius: '16px', width: '450px', textAlign: 'center', boxShadow: modalAcao === 'wipe' ? '0 0 50px rgba(244, 67, 54, 0.4)' : '0 0 50px rgba(33, 150, 243, 0.3)' }}>
-                        <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: modalAcao === 'wipe' ? 'rgba(244, 67, 54, 0.1)' : 'rgba(33, 150, 243, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                            {modalAcao === 'wipe' ? <Skull size={32} color="#f44336" /> : <Save size={32} color="#2196F3" />}
+                    <form onSubmit={executarAcaoCritica} style={{ backgroundColor: '#111', border: modalAcao === 'wipe' ? '1px solid #f44336' : (modalAcao === 'restore' ? '1px solid #FF9800' : '1px solid #2196F3'), padding: '35px', borderRadius: '16px', width: '450px', textAlign: 'center', boxShadow: modalAcao === 'wipe' ? '0 0 50px rgba(244, 67, 54, 0.4)' : (modalAcao === 'restore' ? '0 0 50px rgba(255, 152, 0, 0.3)' : '0 0 50px rgba(33, 150, 243, 0.3)') }}>
+                        <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: modalAcao === 'wipe' ? 'rgba(244, 67, 54, 0.1)' : (modalAcao === 'restore' ? 'rgba(255, 152, 0, 0.1)' : 'rgba(33, 150, 243, 0.1)'), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                            {modalAcao === 'wipe' ? <Skull size={32} color="#f44336" /> : (modalAcao === 'restore' ? <DatabaseBackup size={32} color="#FF9800" /> : <Save size={32} color="#2196F3" />)}
                         </div>
                         
-                        <h2 style={{ color: modalAcao === 'wipe' ? '#f44336' : '#2196F3', marginTop: 0, fontWeight: 600 }}>
-                            {modalAcao === 'wipe' ? 'Aviso de Destruição Global' : 'Autorização Necessária'}
+                        <h2 style={{ color: modalAcao === 'wipe' ? '#f44336' : (modalAcao === 'restore' ? '#FF9800' : '#2196F3'), marginTop: 0, fontWeight: 600 }}>
+                            {modalAcao === 'wipe' ? 'Aviso de Destruição Global' : (modalAcao === 'restore' ? 'Restauração de Backup' : 'Autorização Necessária')}
                         </h2>
                         
                         <p style={{ color: '#ccc', marginBottom: '25px', lineHeight: '1.6' }}>
-                            {modalAcao === 'wipe' 
-                                ? 'Você está prestes a apagar todo o banco de dados. Esta ação é irreversível.'
-                                : 'Você está prestes a gerar um dump completo do banco de dados na máquina.'}
+                            {modalAcao === 'wipe' && 'Você está prestes a apagar todo o banco de dados. Esta ação é irreversível.'}
+                            {modalAcao === 'backup' && 'Você está prestes a gerar um dump completo do banco de dados (JSON) na pasta /backups.'}
+                            {modalAcao === 'restore' && 'Você está prestes a apagar o mundo atual e carregar um save do passado.'}
                         </p>
+
+                        {modalAcao === 'restore' && (
+                            <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <label style={{ color: '#aaa', fontSize: '13px', display: 'block', marginBottom: '10px' }}>
+                                    Selecione o arquivo de Backup:
+                                </label>
+                                {backupsDisponiveis.length === 0 ? (
+                                    <div style={{ color: '#f44336', fontSize: '14px' }}>Nenhum backup encontrado na pasta /backups.</div>
+                                ) : (
+                                    <select 
+                                        value={arquivoSelecionado} 
+                                        onChange={e => setArquivoSelecionado(e.target.value)}
+                                        style={{ width: '100%', padding: '10px', backgroundColor: '#222', color: 'white', border: '1px solid #444', borderRadius: '6px' }}
+                                    >
+                                        {backupsDisponiveis.map(b => (
+                                            <option key={b} value={b}>{b}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+                        )}
                         
                         <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px', marginBottom: '25px', border: '1px solid rgba(255,255,255,0.1)' }}>
                             <label style={{ color: '#aaa', fontSize: '13px', display: 'block', marginBottom: '10px' }}>
@@ -202,9 +250,9 @@ const ControleServidor: React.FC = () => {
                             <button type="button" onClick={() => {setModalAcao(null); setSenhaDigitada('')}} className="botaoGeral" style={{ background: 'transparent', border: '1px solid #555', color: '#ccc', flex: 1 }}>Cancelar</button>
                             <button 
                                 type="submit" 
-                                disabled={executando || !senhaDigitada}
+                                disabled={executando || !senhaDigitada || (modalAcao === 'restore' && !arquivoSelecionado)}
                                 className="botaoGeral" 
-                                style={{ background: modalAcao === 'wipe' ? '#f44336' : '#2196F3', border: 'none', color: 'white', flex: 1, opacity: executando || !senhaDigitada ? 0.5 : 1 }}
+                                style={{ background: modalAcao === 'wipe' ? '#f44336' : (modalAcao === 'restore' ? '#FF9800' : '#2196F3'), border: 'none', color: 'white', flex: 1, opacity: executando || !senhaDigitada ? 0.5 : 1 }}
                             >
                                 {executando ? 'Processando...' : 'Confirmar e Executar'}
                             </button>

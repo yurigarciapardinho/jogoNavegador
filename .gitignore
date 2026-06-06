@@ -44,3 +44,7 @@ Thumbs.db
 *.pem
 *.key
 secrets.json
+
+# Backups do Banco
+backups/
+backend/backups/
