@@ -79,15 +79,19 @@ echo -e "  [2] ${AZUL}Nuvem${RESET} (Supabase)"
 read -p "Escolha [1/2] (Padrão 1): " OPCAO_BD
 
 if [ "$OPCAO_BD" == "2" ]; then
-    echo -e "${AZUL}[Banco de Dados] Configurando para Nuvem (Supabase)...${RESET}"
-    cat <<EOF > "$DIR_BACKEND/.env"
-# PostgreSQL — Supabase
-DATABASE_URL="postgresql://postgres:6kDilfNydUbFyOVd@db.xxtkfldycbdvvelqxggu.supabase.co:5432/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres:6kDilfNydUbFyOVd@db.xxtkfldycbdvvelqxggu.supabase.co:5432/postgres"
+    echo -e "${AZUL}[Banco de Dados] Opção em Nuvem selecionada.${RESET}"
+    echo -e "${AMARELO}[ATENÇÃO] Configure manualmente as credenciais em backend/.env conforme backend/.env.example${RESET}"
+    
+    if [ ! -f "$DIR_BACKEND/.env" ]; then
+        cat <<EOF > "$DIR_BACKEND/.env"
+# Configuração pendente para Banco de Dados na Nuvem
+DATABASE_URL="postgresql://usuario:senha@host:5432/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://usuario:senha@host:5432/postgres"
 PORT=8080
 CONSELHEIRO_URL="http://localhost:3000/perguntar"
 CORS_ORIGIN="*"
 EOF
+    fi
 else
     echo -e "${VERDE}[Banco de Dados] Configurando para Local (Docker)...${RESET}"
     if ! command -v docker &>/dev/null; then
