@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { MotorMapa } from '../game/MotorMapa'
 import { api } from '../api'
 import { usarEstadoJogo } from '../store/estadoJogo'
-import { obterCapacidadeArmazem } from '../constantes/constantesJogo'
+import { obterCapacidadeArmazem, obterCapacidadeFazenda, getBuildingPopCost, PROPRIEDADES_UNIDADES } from '../constantes/constantesJogo'
 
 export default function TelaMapa() {
     const refContainer = useRef<HTMLDivElement>(null)
@@ -10,6 +10,7 @@ export default function TelaMapa() {
     const { token, usuario, adicionarNotificacao, dadosAldeia, serverSpeed, trocarAldeiaAtiva, userVillages } = usarEstadoJogo()
     
     const [aldeiaSelecionada, definirAldeiaSelecionada] = useState<any | null>(null)
+    const [detalhesAlvo, setDetalhesAlvo] = useState<any>(null)
     const [abaAtiva, definirAbaAtiva] = useState<'info' | 'atacar' | 'apoiar' | 'mercado' | 'admin'>('info')
     
     const [qtdLanceiro, definirQtdLanceiro] = useState(0)
@@ -71,6 +72,66 @@ export default function TelaMapa() {
         }
         return () => { estaMontado = false }
     }, [token, usuario])
+
+    useEffect(() => {
+        let isMounted = true
+        if (aldeiaSelecionada && usuario && aldeiaSelecionada.userId === usuario.id) {
+            api.get(`/village/${aldeiaSelecionada.id}`, token)
+               .then(res => {
+                   if (isMounted) setDetalhesAlvo(res)
+               })
+               .catch(err => console.error("Failed to load target details", err))
+        } else {
+            setDetalhesAlvo(null)
+        }
+        return () => { isMounted = false }
+    }, [aldeiaSelecionada, usuario, token])
+
+    const popAlvoAtual = useMemo(() => {
+        if (!detalhesAlvo) return 0;
+        let pop = 0;
+        
+        if (detalhesAlvo.buildings) {
+            ['hq', 'wood', 'clay', 'iron', 'farm', 'storage', 'barracks', 'market'].forEach((b: any) => {
+                pop += getBuildingPopCost(b, detalhesAlvo.buildings[b] || 1)
+            })
+        }
+        
+        const addPop = (spear: number, sword: number, axe: number) => {
+            pop += (spear || 0) * (PROPRIEDADES_UNIDADES.spear?.populacao || 1)
+            pop += (sword || 0) * (PROPRIEDADES_UNIDADES.sword?.populacao || 1)
+            pop += (axe || 0) * (PROPRIEDADES_UNIDADES.axe?.populacao || 1)
+        }
+
+        if (detalhesAlvo.units) {
+            addPop(detalhesAlvo.units.spear, detalhesAlvo.units.sword, detalhesAlvo.units.axe)
+        }
+        
+        detalhesAlvo.activeUnitQueue?.forEach((q: any) => {
+            const props = PROPRIEDADES_UNIDADES[q.unitType as 'spear'|'sword'|'axe'];
+            if (props) pop += q.amount * (props.populacao || 1);
+        });
+        
+        detalhesAlvo.movementsOrigin?.forEach((m: any) => {
+            if (m.type !== 'TRANSFER') {
+                addPop(m.spear, m.sword, m.axe)
+            }
+        });
+
+        detalhesAlvo.movementsTarget?.forEach((m: any) => {
+            if (m.type === 'TRANSFER') {
+                addPop(m.spear, m.sword, m.axe)
+            }
+        });
+
+        detalhesAlvo.supportingSent?.forEach((s: any) => {
+            addPop(s.spear, s.sword, s.axe)
+        });
+
+        return pop;
+    }, [detalhesAlvo]);
+
+    const maxPopAlvo = obterCapacidadeFazenda(detalhesAlvo?.buildings?.farm || 1);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -427,6 +488,13 @@ export default function TelaMapa() {
 
                         {(abaAtiva === 'atacar' || abaAtiva === 'apoiar' || abaAtiva === 'transferir') && (
                             <div style={{ marginTop: 'var(--espacamentoMedio)' }}>
+                                {(abaAtiva === 'transferir' && detalhesAlvo) && (
+                                    <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: 'rgba(168, 85, 247, 0.1)', border: '1px solid #a855f7', borderRadius: '5px' }}>
+                                        <p style={{ margin: 0, color: '#d8b4fe', fontWeight: 'bold' }}>
+                                            Fazenda do Destino: {popAlvoAtual} / {maxPopAlvo}
+                                        </p>
+                                    </div>
+                                )}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--espacamentoMedio)' }}>
                                     <p className="campoRotulo" style={{ margin: 0 }}>Selecione as tropas:</p>
                                     <span style={{ fontSize: '0.9rem', color: 'var(--corPrimariaHover)', fontWeight: 'bold' }}>

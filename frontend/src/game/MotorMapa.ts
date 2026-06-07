@@ -170,6 +170,7 @@ export class MotorMapa {
                         if (mov.type === 'RETURN') label = 'Retorno (Tropas)'
                         if (mov.type === 'TRANSPORT') label = 'Transporte'
                         if (mov.type === 'TRANSPORT_RETURN') label = 'Retorno (Mercadores)'
+                        if (mov.type === 'TRANSFER') label = 'Transferência'
                         this.textTooltip.text = `${label}: ${this.formatarTempo(arrivalMs - Date.now())}`
                         const bg = this.tooltipMovimento.getChildAt(0) as Graphics
                         bg.clear().roundRect(0, 0, this.textTooltip.width + 20, 30, 5).fill({ color: 0x000000, alpha: 0.8 }).stroke({ width: 1, color: 0xffffff })
@@ -192,6 +193,7 @@ export class MotorMapa {
                 if (mov.type === 'RETURN') { corLinha = 0xf59e0b; emoji = '🔙' }
                 if (mov.type === 'TRANSPORT') { corLinha = 0x10b981; emoji = '📦' }
                 if (mov.type === 'TRANSPORT_RETURN') { corLinha = 0x94a3b8; emoji = '🔄' }
+                if (mov.type === 'TRANSFER') { corLinha = 0xa855f7; emoji = '🚚' }
 
                 // Desenhar Linha Tracejada (Dashed Line) matematicamente - UMA VEZ
                 const distance = Math.hypot(tx - ox, ty - oy)
