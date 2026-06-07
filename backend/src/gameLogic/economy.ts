@@ -81,19 +81,19 @@ export const getTotalUsedPopulation = async (tx: any, villageId: string): Promis
         if (qStats) currentPop += q.amount * (qStats.population || 1)
     }
     
-    // Movimentos saindo
-    const movementsOrigin = await tx.movement.findMany({ where: { originId: villageId, completed: false } })
-    for (const m of movementsOrigin) {
-        if (m.type !== 'TRANSFER') {
-            currentPop += (m.spear || 0) * (UNIT_STATS.spear.population || 1)
-            currentPop += (m.sword || 0) * (UNIT_STATS.sword.population || 1)
-            currentPop += (m.axe || 0) * (UNIT_STATS.axe.population || 1)
-        }
+    // Movimentos saindo (exceto transferências definitivas, que já liberam a pop na origem)
+    const movements = await tx.movement.findMany({ where: { originId: villageId, completed: false } })
+    for (const m of movements) {
+        if (m.type === 'TRANSFER') continue; // População de transferência sai na mesma hora da origem
+
+        currentPop += (m.spear || 0) * (UNIT_STATS.spear.population || 1)
+        currentPop += (m.sword || 0) * (UNIT_STATS.sword.population || 1)
+        currentPop += (m.axe || 0) * (UNIT_STATS.axe.population || 1)
     }
-    
-    // Movimentos de transferência chegando (ocupam a fazenda alvo antes de chegar)
-    const movementsTarget = await tx.movement.findMany({ where: { targetId: villageId, type: 'TRANSFER', completed: false } })
-    for (const m of movementsTarget) {
+
+    // Movimentos chegando do tipo TRANSFER (Reservam a população da aldeia de destino enquanto viajam)
+    const incomingTransfers = await tx.movement.findMany({ where: { targetId: villageId, type: 'TRANSFER', completed: false } })
+    for (const m of incomingTransfers) {
         currentPop += (m.spear || 0) * (UNIT_STATS.spear.population || 1)
         currentPop += (m.sword || 0) * (UNIT_STATS.sword.population || 1)
         currentPop += (m.axe || 0) * (UNIT_STATS.axe.population || 1)

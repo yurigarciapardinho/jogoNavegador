@@ -54,12 +54,12 @@ export default function TelaAldeia() {
         
         dadosAldeia.movementsOrigin?.forEach((m: any) => {
             if (m.type !== 'TRANSFER') {
-                addUnidades(m.spear, m.sword, m.axe)
+                addUnidades(m.spear, m.sword, m.axe);
             }
         });
         dadosAldeia.movementsTarget?.forEach((m: any) => {
             if (m.type === 'TRANSFER') {
-                addUnidades(m.spear, m.sword, m.axe)
+                addUnidades(m.spear, m.sword, m.axe);
             }
         });
         dadosAldeia.supportingSent?.forEach((s: any) => addUnidades(s.spear, s.sword, s.axe));
