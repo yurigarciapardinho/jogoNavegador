@@ -14,17 +14,19 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
 
     const ataquesSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'ATTACK')
     const apoiosSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'SUPPORT')
+    const transferenciasSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'TRANSFER')
     const mercadoresSaindo = (dadosAldeia?.movementsOrigin || []).filter((m: any) => m.type === 'TRANSPORT')
 
     const ataquesChegando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'ATTACK')
     const apoiosChegandoMov = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'SUPPORT')
+    const transferenciasChegando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'TRANSFER')
     const mercadoresChegando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'TRANSPORT')
     const mercadoresRetornando = (dadosAldeia?.movementsTarget || []).filter((m: any) => m.type === 'TRANSPORT_RETURN')
 
     const tropasApoioFora = dadosAldeia?.supportingSent || []
     const tropasApoioDentro = dadosAldeia?.supportingReceived || []
 
-    const totalMovimentos = ataquesSaindo.length + apoiosSaindo.length + mercadoresSaindo.length + ataquesChegando.length + apoiosChegandoMov.length + mercadoresChegando.length + retornosChegando.length + mercadoresRetornando.length + tropasApoioFora.length + tropasApoioDentro.length
+    const totalMovimentos = ataquesSaindo.length + apoiosSaindo.length + transferenciasSaindo.length + mercadoresSaindo.length + ataquesChegando.length + apoiosChegandoMov.length + transferenciasChegando.length + mercadoresChegando.length + retornosChegando.length + mercadoresRetornando.length + tropasApoioFora.length + tropasApoioDentro.length
     
     const [isExpanded, setIsExpanded] = useState(totalMovimentos > 0)
 
@@ -176,6 +178,20 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                                 </div>
                             ))}
 
+                            {transferenciasChegando.map((m: any) => (
+                                <div key={m.id} style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
+                                    <div style={{ color: '#60a5fa', fontWeight: 'bold' }}>
+                                        <span aria-hidden="true">➡️</span> Transferência Chegando
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                                        De: {m.origin?.name} ({m.origin?.x}|{m.origin?.y})
+                                    </div>
+                                    <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
+                                        <ContadorTempo endTime={m.arrivalTime} />
+                                    </div>
+                                </div>
+                            ))}
+
                             {mercadoresChegando.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#34d399', fontWeight: 'bold' }}>
@@ -249,6 +265,20 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                                 </div>
                             ))}
 
+                            {transferenciasSaindo.map((m: any) => (
+                                <div key={m.id} style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
+                                    <div style={{ color: '#60a5fa', fontWeight: 'bold' }}>
+                                        <span aria-hidden="true">➡️</span> Transferência
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                                        Alvo: {m.target?.name} ({m.target?.x}|{m.target?.y})
+                                    </div>
+                                    <div style={{ marginTop: '5px', fontWeight: 'bold' }}>
+                                        <ContadorTempo endTime={m.arrivalTime} />
+                                    </div>
+                                </div>
+                            ))}
+
                             {mercadoresSaindo.map((m: any) => (
                                 <div key={m.id} style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '10px', borderRadius: '5px', marginBottom: '8px' }}>
                                     <div style={{ color: '#34d399', fontWeight: 'bold' }}>
@@ -265,7 +295,7 @@ export default function PainelMovimentos({ dadosAldeia, aoAtualizar }: { dadosAl
                         </div>
                     )}
 
-                    {ataquesSaindo.length === 0 && apoiosSaindo.length === 0 && mercadoresSaindo.length === 0 && retornosChegando.length === 0 && ataquesChegando.length === 0 && apoiosChegandoMov.length === 0 && mercadoresChegando.length === 0 && mercadoresRetornando.length === 0 && (
+                    {ataquesSaindo.length === 0 && apoiosSaindo.length === 0 && transferenciasSaindo.length === 0 && mercadoresSaindo.length === 0 && retornosChegando.length === 0 && ataquesChegando.length === 0 && apoiosChegandoMov.length === 0 && transferenciasChegando.length === 0 && mercadoresChegando.length === 0 && mercadoresRetornando.length === 0 && (
                         <div>
                             <h3 style={{ color: '#94a3b8', borderBottom: '1px solid #475569', paddingBottom: '5px' }}>Comandos</h3>
                             <p style={{ color: '#64748b', marginTop: '10px' }}>Nenhum movimento ativo.</p>

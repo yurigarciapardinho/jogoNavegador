@@ -189,7 +189,7 @@ export default function TelaMapa() {
                 axe: qtdBarbaro
             }, token)
 
-            adicionarNotificacao(`${tipo === 'ATTACK' ? 'Ataque' : 'Apoio'} enviado com sucesso!`, 'sucesso')
+            adicionarNotificacao(`${tipo === 'ATTACK' ? 'Ataque' : tipo === 'SUPPORT' ? 'Apoio' : 'Transferência'} enviad${tipo === 'TRANSFER' ? 'a' : 'o'} com sucesso!`, 'sucesso')
             definirAldeiaSelecionada(null)
             definirQtdLanceiro(0)
             definirQtdEspadachim(0)
