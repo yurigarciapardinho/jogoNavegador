@@ -88,6 +88,7 @@ if [ "$OPCAO_BD" == "2" ]; then
 DATABASE_URL="postgresql://usuario:senha@host:5432/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://usuario:senha@host:5432/postgres"
 PORT=8080
+JWT_SECRET="minha-chave-super-secreta"
 CONSELHEIRO_URL="http://localhost:3000/perguntar"
 CORS_ORIGIN="*"
 EOF
@@ -113,6 +114,7 @@ else
 DATABASE_URL="postgresql://tw2_user:tw2_pass@localhost:5432/tw2_db?schema=public"
 DIRECT_URL="postgresql://tw2_user:tw2_pass@localhost:5432/tw2_db?schema=public"
 PORT=8080
+JWT_SECRET="minha-chave-super-secreta"
 CONSELHEIRO_URL="http://localhost:3000/perguntar"
 CORS_ORIGIN="*"
 EOF
